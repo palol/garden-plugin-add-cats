@@ -1,0 +1,73 @@
+{
+  "id": "add-cats",
+  "name": "Add Cats",
+  "version": "1.0.0",
+  "description": "Resident pixel cats that appear on tagged pages, stay, and run to wherever visitors click. Bundled public-domain Neko skins plus bring-your-own sprite sheets.",
+  "author": "Paolo Gabriel",
+  "slots": {
+    "common.footer": "templates/cats.njk"
+  },
+  "styles": ["styles.css"],
+  "scripts": ["add-cats.js"],
+  "assets": ["assets/"],
+  "settings": [
+    {
+      "key": "enabled",
+      "name": "Enabled",
+      "description": "Master toggle. Cats appear only on pages tagged with the note flag, and only while this is on.",
+      "type": "boolean",
+      "default": true,
+      "env": "ADD_CATS_ENABLED"
+    },
+    {
+      "key": "count",
+      "name": "Resident cat count",
+      "description": "Number of cats that appear on a tagged page. Clamped 1 to 5.",
+      "type": "number",
+      "default": 3,
+      "env": "ADD_CATS_COUNT"
+    },
+    {
+      "key": "scale",
+      "name": "Sprite size",
+      "description": "Rendered pixel size of each cat sprite. 16 to 64, default 32.",
+      "type": "number",
+      "default": 32,
+      "env": "ADD_CATS_SCALE"
+    },
+    {
+      "key": "summonMode",
+      "name": "Click behavior",
+      "description": "clicked: nearest cat walks to the click. stampede: all cats run to the click at their own speed.",
+      "type": "select",
+      "default": "clicked",
+      "options": ["clicked", "stampede"],
+      "env": "ADD_CATS_SUMMON_MODE"
+    },
+    {
+      "key": "skin",
+      "name": "Skin",
+      "description": "Skin id, or random to mix bundled and configured skins across the resident cats.",
+      "type": "text",
+      "default": "random",
+      "env": "ADD_CATS_SKIN"
+    },
+    {
+      "key": "chromaKey",
+      "name": "Background key color",
+      "description": "Optional hex color (e.g. #00AEF0) removed from sprite sheets that use a flat background instead of transparency. Leave empty for sheets that already have a transparent background.",
+      "type": "text",
+      "default": "",
+      "env": "ADD_CATS_CHROMA_KEY"
+    },
+    {
+      "key": "skins",
+      "name": "Sprite sheets",
+      "description": "Bring-your-own sprite sheets. Map a skin id to an absolute HTTP(S) URL or site-root-relative path of a PNG sprite sheet. Example {\"calico\":\"/nekos/calico.png\"}. Share the id via the skin setting. Sheets may use the classic Neko layout (263x197) or the oneko layout (256x128); both are auto-detected. Public-domain classic skins: https://bomvel.neocities.org/neko/",
+      "type": "text",
+      "default": "",
+      "env": "ADD_CATS_SKINS"
+    }
+  ],
+  "noteSettings": ["dgAddCats"]
+}

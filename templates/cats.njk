@@ -1,0 +1,10 @@
+{% if pluginSettings.enabled and settings.dgAddCats %}
+<script data-add-cats="1"
+        data-count="{{ pluginSettings.count }}"
+        data-scale="{{ pluginSettings.scale }}"
+        data-mode="{{ pluginSettings.summonMode }}"
+        data-skin="{{ pluginSettings.skin }}"
+        data-assets="/plugins/add-cats/assets/"
+        data-chroma-key="{{ pluginSettings.chromaKey }}"
+        data-skins='{{ pluginSettings.skins | dump | escape }}'></script>
+{% endif %}

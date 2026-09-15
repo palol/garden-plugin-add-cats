@@ -1,0 +1,22 @@
+/* Add Cats - resident pixel cats for Digital Garden.
+   Each cat is a fixed-position element showing one 32px cell of a sprite sheet.
+   The script sets width/height, background-size and background-position inline,
+   so this file only carries what the script should not own: pointer behavior,
+   pixel rendering, and the reduced-motion static pose. */
+.add-cats-cat {
+  position: fixed;
+  pointer-events: none;   /* cats never block page interaction or text selection */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background-repeat: no-repeat;
+  z-index: 2147483000;
+  will-change: left, top;
+}
+
+/* Respect the visitor's motion preference: the script holds a static idle
+   cell instead of cycling walk and idle animations. */
+@media (prefers-reduced-motion: reduce) {
+  .add-cats-cat {
+    will-change: auto;
+  }
+}

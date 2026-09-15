@@ -1,0 +1,19 @@
+{
+  "name": "garden-plugin-add-cats",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Development and tests for the Add Cats Digital Garden plugin",
+  "license": "MIT",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": "22.x"
+  },
+  "devDependencies": {
+    "node-html-parser": "^7.0.1",
+    "nunjucks": "^3.2.4",
+    "pngjs": "^7.0.0",
+    "vitest": "^3.2.4"
+  }
+}
