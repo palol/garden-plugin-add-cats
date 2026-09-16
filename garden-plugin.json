@@ -1,7 +1,7 @@
 {
   "id": "add-cats",
   "name": "Add Cats",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Resident pixel cats that appear on tagged pages, stay, and run to wherever visitors click. Bundled public-domain Neko skins plus bring-your-own sprite sheets.",
   "author": "Paolo Gabriel",
   "slots": {
@@ -92,6 +92,22 @@
       "type": "text",
       "default": "",
       "env": "ADD_CATS_SKINS"
+    },
+    {
+      "key": "trail",
+      "name": "Paw prints",
+      "description": "Leave a fading trail of paw prints behind a running cat. Prints come from the cat's own sheet when it has a mark row (the classic 263x197 layout, row 4) and from the bundled classic sheet otherwise, so brought-your-own oneko sheets get a trail too. Never drawn when the visitor prefers reduced motion.",
+      "type": "boolean",
+      "default": true,
+      "env": "ADD_CATS_TRAIL"
+    },
+    {
+      "key": "trailFade",
+      "name": "Paw print fade",
+      "description": "Seconds a paw print takes to fade out before it is removed. Clamped 1 to 30.",
+      "type": "number",
+      "default": 4,
+      "env": "ADD_CATS_TRAIL_FADE"
     },
     {
       "key": "speeds",

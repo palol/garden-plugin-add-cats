@@ -13,8 +13,26 @@
   will-change: left, top;
 }
 
+/* Trail marks: one element per print, stamped behind a running cat and faded out
+   by the script. Same fixed-position pixel-art approach as the cat, and like the
+   cat the mark is drawn as bare sprite pixels — no plate, box or background of
+   any kind behind it. On a dark page the marks are dark art on dark ground; pair
+   this rule with a filter in the site's own dark theme (see the README's
+   "Paw prints" section) rather than plating every print everywhere. */
+.add-cats-print {
+  position: fixed;
+  pointer-events: none;   /* a print never blocks page interaction */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background-repeat: no-repeat;
+  background-color: transparent;
+  z-index: 2147482900;    /* under the cats, over page content */
+  transform-origin: center;   /* the script rotates a mark to the cat's heading */
+  will-change: opacity, transform;
+}
+
 /* Respect the visitor's motion preference: the script holds a static idle
-   cell instead of cycling walk and idle animations. */
+   cell instead of cycling walk and idle animations, and stamps no prints. */
 @media (prefers-reduced-motion: reduce) {
   .add-cats-cat {
     will-change: auto;

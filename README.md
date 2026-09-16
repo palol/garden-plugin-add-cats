@@ -37,6 +37,56 @@ any note.
 - **clicked** (default) — the nearest cat walks to where you click.
 - **stampede** — every cat runs to the click point, each at its own speed.
 
+## Paw prints
+
+A running cat leaves a fading trail of paw prints. The marks are row 4 of a
+classic sheet — four paw-print variants, drawn facing south — so the trail reuses
+the sheet's own pixel art instead of shipping a separate asset.
+
+Every mark is turned to the direction the cat is travelling, so the toes point
+along the path. The heading comes from the whole stretch of travel since the last
+print rather than the last step, so a cat weaving slightly still leaves prints
+pointing where it is going, and it is rounded to 45deg steps — the eight
+directions a cat walks — which keeps quarter turns exactly on the pixel grid and
+gives a diagonal the same nearest-neighbour turn the rest of the pixel art gets.
+
+The four cell variants are not drawn the same way round (one faces south, the
+others south-east, east and north-east), and each draws its print in a corner of
+its cell. Both facts are measured from the shipped art and declared with the
+cells, so a stamp is nudged back over the cat and turned by the difference
+between the cat's heading and that cell's own facing. Both are covered by tests
+that re-measure the bundled sheets, so the trail cannot silently go back to
+pointing at random.
+
+A sheet with no effects row (every 4-row oneko sheet, which is the usual shape of
+a brought-your-own sheet) and a short classic sheet whose row 4 is not prints
+borrow from the bundled classic sheet, so a brought-your-own cat gets a trail too.
+
+A print lands where the cat's paws have just been: the stamp point is the cat's
+centre pulled back along its heading, so the mark sits behind a cat running east,
+west or south as well as north. A fixed offset (for example a little below the
+cat) only ever trails in one direction — it leaves the print beside or ahead of
+the cat in every other one.
+
+A print is stamped every 26px of travel, so a fast cat and a slow cat leave the
+same rhythm of marks, and at most 24 prints are alive at once — the oldest
+retires first, so a long run cannot grow the DOM without bound. `trailFade` sets
+how long a print takes to fade out, and `trail: false` turns the trail off.
+Nothing is stamped when the visitor prefers reduced motion, which also stops the
+cats from walking.
+
+Prints are drawn as bare sprite pixels: no plate, box or background sits behind
+a mark, so the trail reads as prints on the page rather than as pasted squares.
+A dark theme hides dark art on dark ground, so a site with one should pair the
+marks with its own rule in that theme, for example:
+
+```css
+.theme-dark .add-cats-print { filter: invert(1); }                                  /* light marks */
+.theme-dark .add-cats-print { filter: drop-shadow(0 0 1px rgba(255,255,255,.9)); }   /* soft halo */
+```
+
+Match that selector to whichever class your theme puts on `body` or `html`.
+
 ## Skins
 
 Five skins ship with the plugin, all derived from the public-domain classic

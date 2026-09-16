@@ -1,12 +1,14 @@
 /* Add Cats — resident pixel cats for Digital Garden.
  *
- * Cats appear on pages tagged with the note flag, settle and stay, and run to
- * wherever a visitor clicks. Zero dependencies, no tracking, no network beyond
- * the sprite sheets the site owner configures.
+ * Cats appear on pages tagged with the note flag, settle and stay, run to
+ * wherever a visitor clicks, and leave a fading paw-print trail while they run.
+ * Zero dependencies, no tracking, no network beyond the sprite sheets the site
+ * owner configures.
  *
  * Sprite layouts (auto-detected from the loaded sheet's size):
  *   classic  — 263x197, 8x6, 32px cells, 1px separators (classic Neko sheets).
- *              The cat frames occupy the top 4 rows; rows 4-5 are effects/text.
+ *              The cat frames occupy the top 4 rows; row 4 holds the paw-print
+ *              trail marks and row 5 is text, neither drawn as a cat pose.
  *   oneko    — 256x128, 8x4, 32px cells (oneko.gif style sheets).
  * Each frame map lists [column, row] cell coordinates per animation.
  */
@@ -27,6 +29,17 @@
     return Math.max(lo, Math.min(hi, n));
   }
 
+  // Settings that arrive as dataset strings. A boolean setting renders as
+  // "true"/"false"; a site that sets the env var instead may produce "1"/"0".
+  // Both spellings are accepted, and an absent attribute means the default.
+  function boolSetting(raw, dflt) {
+    if (raw === undefined || raw === null || raw === "") return dflt;
+    var v = String(raw).trim().toLowerCase();
+    if (v === "false" || v === "0" || v === "no" || v === "off") return false;
+    if (v === "true" || v === "1" || v === "yes" || v === "on") return true;
+    return dflt;
+  }
+
   var cfg = {
     count: clampInt(script.dataset.count, 1, 5, 3),
     scale: clampInt(script.dataset.scale, 16, 64, 32),
@@ -35,6 +48,8 @@
     assets: script.dataset.assets || "/plugins/add-cats/assets/",
     chromaKey: script.dataset.chromaKey || "",
     tint: script.dataset.tint || "",
+    trail: boolSetting(script.dataset.trail, true),
+    trailFade: clampInt(script.dataset.trailFade, 1, 30, 4),
     skins: {},
     speeds: {},
     tints: {}
@@ -101,7 +116,32 @@
       SW: [[7, 2], [6, 2]],
       W: [[5, 2], [4, 2]],
       NW: [[3, 2], [2, 2]]
-    }
+    },
+    // Trail marks. Row 4 of a classic sheet holds eight paw-print cells: four
+    // variants ([0..3] — pad first, then the toe beans) and the same four drawn
+    // 180deg round ([4..7]). Two things about those four cells are measured off
+    // the shipped art and declared here, because assuming either one is what
+    // makes a trail look random:
+    //
+    //   faces   the screen angle the art's toes already point at, so a stamp is
+    //           turned by the difference between that and the cat's heading
+    //           (see printRotation). The cells are NOT all drawn the same way
+    //           round: cell 0 south, cell 1 south-east, cell 2 east, cell 3
+    //           north-east. The flipped half of the row is not needed — the
+    //           rotation covers it.
+    //   dx/dy   where the art sits inside its cell, as an offset from the cell
+    //           centre. Every cell draws its print in a corner, so a stamp is
+    //           nudged back over the cat before it is turned; without this the
+    //           art swings a dozen pixels off the paw as the mark rotates, and
+    //           turns can push it off the edge of its own box.
+    //
+    // Row 5 is text, never drawn.
+    prints: [
+      { cell: [0, 4], faces: 90,  dx: 0,   dy: -12 },
+      { cell: [1, 4], faces: 45,  dx: -12, dy: -12 },
+      { cell: [2, 4], faces: 0,   dx: -12, dy: -1 },
+      { cell: [3, 4], faces: -45, dx: -12, dy: 11 }
+    ]
   };
 
   var ONEKO_MAP = {
@@ -124,7 +164,11 @@
       SW: [[5, 3], [6, 1]],
       W: [[4, 2], [4, 3]],
       NW: [[1, 0], [1, 1]]
-    }
+    },
+    // A 4-row oneko sheet maps all 32 cells to cat poses and has no effects
+    // row, so it carries no trail marks: prints behind such a cat come from the
+    // bundled classic sheet instead (see loadPrintFallback).
+    prints: null
   };
 
   // Built-in skins: the public-domain classic sheet plus recoloured
@@ -132,6 +176,26 @@
   // reads as a mix of visibly different cats. Other archive skins are
   // author-owned and are deliberately not bundled.
   var BUILTIN = ["neko", "ginger", "smokey", "midnight", "biscuit"];
+
+  // Rows a sheet actually has, from its pixel height: classic sheets carry a 1px
+  // separator, so a row is 33px in a 263x197 sheet and 32px in a oneko sheet.
+  function rowCount(height, stride, cell) {
+    return Math.round((height + (stride - cell)) / stride);
+  }
+
+  // How far to turn a mark so its toes follow the path, as a CSS rotation in
+  // degrees. `base` is the screen angle that cell's art already points at (0 =
+  // east, 90 = south, since screen y runs down), so the turn is simply the
+  // difference between the cat's heading and the art's own facing. Headings are
+  // rounded to 45deg steps — the eight directions a cat walks — which keeps
+  // quarter turns exactly on the pixel grid and gives a diagonal the same
+  // nearest-neighbour turn the rest of the pixel art gets.
+  function printRotation(travelX, travelY, base) {
+    if (!travelX && !travelY) return 0;   // nothing to follow: leave the art as drawn
+    var ang = Math.atan2(travelY, travelX) * 180 / Math.PI;  // 0 = east, 90 = south
+    var rot = Math.round(ang / 45) * 45 - base;
+    return ((rot % 360) + 360) % 360;
+  }
 
   // Classic sheets are 263px wide (8 columns of 32px plus a 1px separator),
   // so their width is not a multiple of the 32px cell. oneko sheets are a
@@ -159,8 +223,10 @@
 
   // Load a sheet, resolve its layout, then key out its background and/or re-hue
   // its cat frames. Both edits need pixel access, so they share one canvas pass.
-  // `id` selects the skin's tint.
-  function loadSheet(url, id, cb) {
+  // `id` selects the skin's tint. `skipKeys` leaves the pixels untouched, for the
+  // bundled sheet a trail borrows prints from: those frames are already keyed, and
+  // a site's own chromaKey or tint could eat print pixels.
+  function loadSheet(url, id, cb, skipKeys) {
     var img = new Image();
     if (/^https?:/i.test(url) && url.indexOf(location.origin) !== 0) {
       img.crossOrigin = "anonymous";
@@ -170,13 +236,19 @@
       // background scaling: classic heights vary (6-row and 5-row sheets both
       // ship), so a map constant would stretch the shorter sheets.
       var base = mapFor(img.naturalWidth, img.naturalHeight);
+      // Trail marks belong to the canonical 6-row classic sheet. A shorter
+      // classic sheet declares none (its row 4 is effects or text, not prints),
+      // so its cat takes prints from the bundled sheet instead of stamping
+      // whatever happens to sit at those coordinates.
+      var rows = rowCount(img.naturalHeight, base.stride, base.cell);
       var map = {
         cell: base.cell, stride: base.stride,
         width: img.naturalWidth, height: img.naturalHeight,
-        frames: base.frames
+        frames: base.frames,
+        prints: base.prints && rows >= 6 ? base.prints : null
       };
-      var tint = tintFor(id);
-      if (cfg.chromaKey || tint) {
+      var tint = skipKeys ? "" : tintFor(id);
+      if (!skipKeys && (cfg.chromaKey || tint)) {
         try {
           var canvas = document.createElement("canvas");
           canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
@@ -348,11 +420,12 @@
     el.style.backgroundImage = "url(" + sheetUrl + ")";
 
     var cat = {
-      el: el, map: map, scale: cfg.scale,
+      el: el, map: map, scale: cfg.scale, skin: skin, sheetUrl: sheetUrl,
       x: 16 + Math.random() * Math.max(1, window.innerWidth - 64),
       y: 40 + Math.random() * Math.max(1, window.innerHeight - 120),
       speed: speedFor(skin),       // per-skin override or 5..14 px per step
-      frame: 0, idle: 0, idleAnim: null, idleAnimFrame: 0
+      frame: 0, idle: 0, idleAnim: null, idleAnimFrame: 0,
+      trailAcc: 0, trailDx: 0, trailDy: 0
     };
     cat.tx = cat.x; cat.ty = cat.y;
     position(cat);
@@ -364,7 +437,9 @@
   function speedFor(skin) {
     var pinned = cfg.speeds && typeof cfg.speeds[skin] === "number"
       ? cfg.speeds[skin] : NaN;
-    return isFinite(pinned) ? pinned : 5 + Math.random() * 9;
+    // A pinned speed below 1px per step never accumulates enough distance to
+    // stamp a print, so the trail would stall silently: floor it.
+    return isFinite(pinned) ? Math.max(1, pinned) : 5 + Math.random() * 9;
   }
 
   function position(cat) {
@@ -379,6 +454,123 @@
       if (d < bd) { bd = d; best = cats[i]; }
     }
     return best;
+  }
+
+  /* ---- paw prints ---------------------------------------------------- */
+
+  // A print is stamped every TRAIL_SPACING pixels of travel, so a fast cat
+  // leaves the same rhythm of prints as a slow one, and TRAIL_MAX caps the live
+  // prints so a long run cannot grow the DOM without bound (the oldest print
+  // retires when the cap is hit). Prints are skipped under
+  // prefers-reduced-motion, which also stops the cats from walking.
+  var TRAIL_SPACING = 26;
+  var TRAIL_MAX = 24;
+  var prints = [];              // live print elements, oldest first
+  var printSheet = null;        // { url, map } fallback for sheets with no marks
+  var printSheetTried = false;
+
+  // A sheet with no mark row (every 4-row oneko sheet, i.e. most brought-your-own
+  // sheets) borrows its prints from the bundled classic sheet; those mark cells
+  // are plain paw prints, so they read correctly behind any cat. Loaded once, on
+  // the first stamp, through the same keying path a sheet takes.
+  function loadPrintFallback(cb) {
+    if (printSheet) { cb(printSheet); return; }
+    if (printSheetTried) { cb(null); return; }
+    printSheetTried = true;
+    // Untouched pixels: the bundled sheets are already keyed, and a site's own
+    // chromaKey or tint has no business editing another skin's print art.
+    loadSheet(cfg.assets + "neko.png", "neko", function (url, map) {
+      if (url && map && map.prints) printSheet = { url: url, map: map };
+      cb(printSheet);
+    }, true);
+  }
+
+  // Where a print comes from: the cat's own sheet when it has a mark row,
+  // otherwise the bundled sheet. The cell carries its own facing and its own
+  // offset inside the cell; stampPrint applies both.
+  function markFor(cat, cb) {
+    if (cat.map.prints) {
+      var set = cat.map.prints;
+      cb({ url: cat.sheetUrl, map: cat.map, mark: set[Math.floor(Math.random() * set.length)] });
+      return;
+    }
+    loadPrintFallback(function (fallback) {
+      if (!fallback) { cb(null); return; }
+      var fset = fallback.map.prints;
+      cb({
+        url: fallback.url, map: fallback.map,
+        mark: fset[Math.floor(Math.random() * fset.length)]
+      });
+    });
+  }
+
+  function removePrint(el) {
+    var i = prints.indexOf(el);
+    if (i !== -1) prints.splice(i, 1);
+    if (el.parentNode) el.parentNode.removeChild(el);
+  }
+
+  // Where a print lands, given the cat's centre and the heading it is travelling
+  // on: centred on the cat and pulled back along that heading, so the mark sits
+  // where the cat's paws have just been. A fixed downward offset cannot do this —
+  // it trails correctly for a cat running north and lands the print beside or
+  // ahead of the cat in every other direction.
+  function stampPoint(cx, cy, headingX, headingY, back, size) {
+    var len = Math.sqrt(headingX * headingX + headingY * headingY);
+    var hx = len > 0 ? headingX / len : 0;
+    var hy = len > 0 ? headingY / len : 1;   // no heading: trail south, as before
+    return { x: cx - hx * back - size / 2, y: cy - hy * back - size / 2 };
+  }
+
+  // `headingX`/`headingY` are the cat's travel vector over the stretch since the
+  // last stamp; each mark's own facing is read from its cell, so one stamp per
+  // cell variant still lands pointing the same way as the others.
+  function stampPrint(cat, headingX, headingY) {
+    if (!cfg.trail || reducedMotion) return;
+    var size = Math.max(12, Math.round(cfg.scale * 0.75));
+    // Capture the stamp point at the triggering step. A fallback sheet load is
+    // asynchronous, and reading cat.x/cat.y in the callback would drop the print
+    // a few frames behind where the cat actually was. Prints landing while that
+    // first load is in flight are skipped, so a trail never doubles up.
+    var at = stampPoint(cat.x, cat.y, headingX, headingY, cfg.scale * 0.35, size);
+    var x = at.x, y = at.y;
+    markFor(cat, function (mark) {
+      if (!mark) return;
+      var k = size / 32;
+      var el = document.createElement("div");
+      el.className = "add-cats-print";
+      el.setAttribute("aria-hidden", "true");
+      el.style.width = size + "px";
+      el.style.height = size + "px";
+      el.style.backgroundImage = "url(" + mark.url + ")";
+      el.style.backgroundSize = (mark.map.width * k) + "px " + (mark.map.height * k) + "px";
+      var cell = mark.mark.cell;
+      el.style.backgroundPosition =
+        (-cell[0] * mark.map.stride * k) + "px " +
+        (-cell[1] * mark.map.stride * k) + "px";
+      // Turn the mark so its toes point along the way the cat is travelling,
+      // measured against the direction that cell's own art already faces, and
+      // pull the art back over the stamp point first: the sheet draws each print
+      // in a corner of its cell, so without the shift a turn would swing the
+      // mark off the cat (and off the edge of its own box).
+      var rotation = printRotation(headingX, headingY, mark.mark.faces || 0);
+      el.style.transform =
+        "rotate(" + rotation + "deg) translate(" +
+        (-mark.mark.dx * k) + "px," + (-mark.mark.dy * k) + "px)";
+      // Stamp behind the cat rather than under it, with a few pixels of scatter
+      // so a straight run does not read as a ruled line.
+      var jx = (Math.random() - 0.5) * 6, jy = (Math.random() - 0.5) * 6;
+      el.style.left = (x + jx) + "px";
+      el.style.top = (y + jy) + "px";
+      el.style.transition = "opacity " + cfg.trailFade + "s linear";
+      document.body.appendChild(el);
+      prints.push(el);
+      // Fade on the next frame, so the transition has a start value to leave
+      // from, then retire the element once it has faded out.
+      setTimeout(function () { el.style.opacity = "0"; }, 16);
+      setTimeout(function () { removePrint(el); }, cfg.trailFade * 1000 + 80);
+      while (prints.length > TRAIL_MAX) removePrint(prints[0]);
+    });
   }
 
   function resetIdle(cat) { cat.idleAnim = null; cat.idleAnimFrame = 0; }
@@ -427,10 +619,33 @@
       if (dx / dist < -0.5) dir += "E";
       setSprite(cat, dir, cat.frame);
     }
+    var wasX = cat.x, wasY = cat.y;
     cat.x -= (dx / dist) * cat.speed;
     cat.y -= (dy / dist) * cat.speed;
     cat.x = Math.max(cfg.scale / 2, Math.min(window.innerWidth - cfg.scale / 2, cat.x));
     cat.y = Math.max(cfg.scale / 2, Math.min(window.innerHeight - cfg.scale / 2, cat.y));
+    // Trail: accumulate how far the cat actually moved and stamp a print each
+    // time that crosses the spacing, carrying the remainder so the marks keep an
+    // even 26px rhythm instead of rounding up to the step size. Measuring the
+    // real displacement (rather than the step size) keeps a cat pinned against a
+    // screen edge — its target still off-screen, so it never idles — from
+    // dribbling prints in one spot.
+    var movedX = cat.x - wasX, movedY = cat.y - wasY;
+    var moved = Math.sqrt(movedX * movedX + movedY * movedY);
+    cat.trailAcc += moved;
+    // Direction comes from the whole stretch since the last print rather than the
+    // last step, so a cat weaving slightly along its path still leaves prints
+    // pointing the way it is actually going. dx/dy point from the cat to its
+    // target, so travel is their negation.
+    cat.trailDx += movedX;
+    cat.trailDy += movedY;
+    if (moved > 0.5 && cat.trailAcc >= TRAIL_SPACING) {
+      cat.trailAcc -= TRAIL_SPACING;
+      var tx = cat.trailDx, ty = cat.trailDy;
+      if (Math.abs(tx) < 0.5 && Math.abs(ty) < 0.5) { tx = -dx; ty = -dy; }
+      cat.trailDx = 0; cat.trailDy = 0;
+      stampPrint(cat, tx, ty);
+    }
     position(cat);
   }
 
@@ -467,6 +682,15 @@
     // Stagger asynchronous sheet loads so each cat can carry its own skin.
     if (index >= skinsToSpawn.length) {
       if (cats.length) {
+        // A cat whose sheet carries no mark row borrows prints from the bundled
+        // sheet; fetching it now means the first run of such a cat stamps from
+        // its first stride instead of waiting on a load mid-run. Pages whose cats
+        // all have their own marks make no extra request.
+        if (cfg.trail && !reducedMotion) {
+          for (var c = 0; c < cats.length; c++) {
+            if (!cats[c].map.prints) { loadPrintFallback(function () {}); break; }
+          }
+        }
         requestAnimationFrame(tick);
         document.addEventListener("click", onPointer);
         document.addEventListener("touchend", onPointer);
