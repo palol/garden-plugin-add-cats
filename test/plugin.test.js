@@ -19,7 +19,7 @@ function render(settings, pluginSettings) {
 
 const basePlugin = {
   enabled: true, count: 3, scale: 32, summonMode: "clicked",
-  skin: "neko", skins: "", chromaKey: "",
+  skin: "neko", skins: "", chromaKey: "", tint: "", tints: "",
 };
 
 // Read width/height from a PNG IHDR chunk (bytes 16..24), big-endian.
@@ -55,6 +55,15 @@ describe("manifest", () => {
     for (const s of manifest.settings) {
       expect(s.key, JSON.stringify(s)).toBeTruthy();
       expect(["text", "boolean", "number", "select"]).toContain(s.type);
+    }
+  });
+
+  it("declares the fur colour settings with their environment names", () => {
+    const byKey = Object.fromEntries(manifest.settings.map((s) => [s.key, s]));
+    for (const [key, env] of [["tint", "ADD_CATS_TINT"], ["tints", "ADD_CATS_TINTS"]]) {
+      expect(byKey[key], key + " declared").toBeTruthy();
+      expect(byKey[key].type, key).toBe("text");
+      expect(byKey[key].env, key).toBe(env);
     }
   });
 
@@ -108,6 +117,17 @@ describe("template rendering", () => {
     expect(JSON.parse(el.getAttribute("data-skins") || "{}")).toEqual(
       expectedSkins
     );
+  });
+
+  it("passes the fur colour settings through to the client", () => {
+    const html = render({ dgAddCats: true }, {
+      ...basePlugin, tint: "#8b6bd6", tints: '{"greta":"#a06cd5"}',
+    });
+    const el = parse(html).querySelector("script[data-add-cats]");
+    expect(el.getAttribute("data-tint")).toBe("#8b6bd6");
+    // Per-skin colours ride in a single-quoted JSON attribute, so they round-trip
+    // to a parsed object on the client like the skins map does.
+    expect(JSON.parse(el.getAttribute("data-tints"))).toEqual({ greta: "#a06cd5" });
   });
 
   it("escapes a hostile skin map instead of emitting raw markup", () => {
@@ -165,6 +185,20 @@ describe("client behavior (source contract)", () => {
     // stretch. Bundled sheets are both 197, but BYO skins are not.
     expect(clientSrc).toContain("width: img.naturalWidth, height: img.naturalHeight");
     expect(clientSrc).toContain("el.style.backgroundSize = (map.width * k)");
+  });
+
+  it("re-hues the cat frames from a validated hex colour", () => {
+    expect(clientSrc).toContain("script.dataset.tint");
+    expect(clientSrc).toContain("script.dataset.tints");
+    // A malformed colour must degrade to "no tint", never to a broken sheet.
+    expect(clientSrc).toContain("/^#([0-9a-f]{3}|[0-9a-f]{6})$/");
+    // Chroma keying and re-hueing share one canvas pass, so a sheet is drawn once.
+    expect(clientSrc).toContain("if (cfg.chromaKey || tint)");
+    // Only the rows the frame map draws cats from are touched, so the effects
+    // and text frames in a classic sheet's lower rows keep their colours.
+    expect(clientSrc).toContain("catRowsOf(map)");
+    expect(clientSrc).toContain("rows.indexOf(Math.floor(y / stride)) === -1");
+    expect(template).toContain("data-tint");
   });
 
   it("fetches only the configured sheets and makes no other requests", () => {
