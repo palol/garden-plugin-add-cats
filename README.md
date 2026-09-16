@@ -95,6 +95,12 @@ Give one skin its own colour with `tints`, which wins over `tint` for that skin:
 { "tints": "{\"greta\":\"#a06cd5\",\"nigel\":\"#5c6b73\"}" }
 ```
 
+`random` composes with tints by skin. With `skin: random` each cat draws a random
+skin, then takes that skin's colour from `tints`, falling back to the global
+`tint` for any skin without an entry. So give several skins a `tints` entry to
+get varied cats under random, or set only `tint` for a uniform recolour. The
+colour never changes which skin the random draw made.
+
 Worth knowing before you pick a colour:
 
 - **Intended for the near-white classic sheets.** Re-hueing an already-coloured
