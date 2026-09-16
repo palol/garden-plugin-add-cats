@@ -252,3 +252,46 @@ describe("tint against the real bundled sheet", () => {
     expect(fur).toBeGreaterThan(1000);
   });
 });
+
+
+// randomSkin draws from availableSkins(), which sits above the tint block and
+// depends on BUILTIN, so this composition test pulls a wider slice from BUILTIN
+// through randomSkin and checks that a random draw always resolves to a concrete
+// skin, and that skin to a colour.
+const compStart = clientSrc.indexOf("var BUILTIN = [");
+const compEnd = clientSrc.indexOf("\n  }", clientSrc.indexOf("function randomSkin(")) + 4;
+const compBlock = clientSrc.slice(compStart, compEnd);
+
+function loadCompose(cfg) {
+  return new Function(
+    "cfg",
+    compBlock +
+      "\n  return { availableSkins: availableSkins, randomSkin: randomSkin, tintFor: tintFor };"
+  )(cfg || {});
+}
+
+describe("tint composes with skin: random", () => {
+  it("a random draw resolves to a real skin, which takes its per-skin colour", () => {
+    const a = loadCompose({ tint: "#8b6bd6", skins: {}, tints: { neko: "#a06cd5" } });
+    const pool = a.availableSkins();
+    expect(pool.length).toBeGreaterThan(0);
+
+    // every skin a random draw could pick maps to a colour: its own tints
+    // entry, or the global tint as the fallback
+    for (const skin of pool) {
+      const c = a.tintFor(skin);
+      expect(c).toBeTruthy();
+      expect(c).toBe(skin === "neko" ? "#a06cd5" : "#8b6bd6");
+    }
+
+    // and an actual draw returns a member of that pool, never the literal
+    // "random" marker, so per-skin colours are what a random cat wears
+    const realRandom = Math.random;
+    Math.random = () => 0.42;
+    try {
+      expect(pool).toContain(a.randomSkin());
+    } finally {
+      Math.random = realRandom;
+    }
+  });
+});
