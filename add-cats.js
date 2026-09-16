@@ -118,11 +118,30 @@
       NW: [[3, 2], [2, 2]]
     },
     // Trail marks. Row 4 of a classic sheet holds eight paw-print cells: four
-    // variants pointing south ([0..3] — pad first, then the toe beans) and the
-    // same four pointing north ([4..7], their 180 rotation). A running cat
-    // stamps the set that matches the direction it is travelling, so a print
-    // always points the way the cat is heading. Row 5 is text, never drawn.
-    prints: { s: [[0, 4], [1, 4], [2, 4], [3, 4]], n: [[4, 4], [5, 4], [6, 4], [7, 4]] }
+    // variants ([0..3] — pad first, then the toe beans) and the same four drawn
+    // 180deg round ([4..7]). Two things about those four cells are measured off
+    // the shipped art and declared here, because assuming either one is what
+    // makes a trail look random:
+    //
+    //   faces   the screen angle the art's toes already point at, so a stamp is
+    //           turned by the difference between that and the cat's heading
+    //           (see printRotation). The cells are NOT all drawn the same way
+    //           round: cell 0 south, cell 1 south-east, cell 2 east, cell 3
+    //           north-east. The flipped half of the row is not needed — the
+    //           rotation covers it.
+    //   dx/dy   where the art sits inside its cell, as an offset from the cell
+    //           centre. Every cell draws its print in a corner, so a stamp is
+    //           nudged back over the cat before it is turned; without this the
+    //           art swings a dozen pixels off the paw as the mark rotates, and
+    //           turns can push it off the edge of its own box.
+    //
+    // Row 5 is text, never drawn.
+    prints: [
+      { cell: [0, 4], faces: 90,  dx: 0,   dy: -12 },
+      { cell: [1, 4], faces: 45,  dx: -12, dy: -12 },
+      { cell: [2, 4], faces: 0,   dx: -12, dy: -1 },
+      { cell: [3, 4], faces: -45, dx: -12, dy: 11 }
+    ]
   };
 
   var ONEKO_MAP = {
@@ -164,17 +183,18 @@
     return Math.round((height + (stride - cell)) / stride);
   }
 
-  // Print orientation for one step, given the travel vector and its length. The
-  // sheet only draws prints facing south and north, so the vertical component
-  // decides whenever the step is steep enough to have one — the same 0.5
-  // threshold the walk sprites use, so a print never disagrees with the pose the
-  // cat is showing. A mostly-horizontal run has no faithful print in the art: it
-  // leans on its horizontal direction instead (east -> south, west -> north),
-  // which is consistent rather than accurate.
-  function printFacesSouth(travelX, travelY, dist) {
-    if (travelY / dist >= 0.5) return true;
-    if (travelY / dist <= -0.5) return false;
-    return travelX >= 0;
+  // How far to turn a mark so its toes follow the path, as a CSS rotation in
+  // degrees. `base` is the screen angle that cell's art already points at (0 =
+  // east, 90 = south, since screen y runs down), so the turn is simply the
+  // difference between the cat's heading and the art's own facing. Headings are
+  // rounded to 45deg steps — the eight directions a cat walks — which keeps
+  // quarter turns exactly on the pixel grid and gives a diagonal the same
+  // nearest-neighbour turn the rest of the pixel art gets.
+  function printRotation(travelX, travelY, base) {
+    if (!travelX && !travelY) return 0;   // nothing to follow: leave the art as drawn
+    var ang = Math.atan2(travelY, travelX) * 180 / Math.PI;  // 0 = east, 90 = south
+    var rot = Math.round(ang / 45) * 45 - base;
+    return ((rot % 360) + 360) % 360;
   }
 
   // Classic sheets are 263px wide (8 columns of 32px plus a 1px separator),
@@ -404,7 +424,8 @@
       x: 16 + Math.random() * Math.max(1, window.innerWidth - 64),
       y: 40 + Math.random() * Math.max(1, window.innerHeight - 120),
       speed: speedFor(skin),       // per-skin override or 5..14 px per step
-      frame: 0, idle: 0, idleAnim: null, idleAnimFrame: 0, trailAcc: 0
+      frame: 0, idle: 0, idleAnim: null, idleAnimFrame: 0,
+      trailAcc: 0, trailDx: 0, trailDy: 0
     };
     cat.tx = cat.x; cat.ty = cat.y;
     position(cat);
@@ -465,20 +486,20 @@
   }
 
   // Where a print comes from: the cat's own sheet when it has a mark row,
-  // otherwise the bundled sheet. `goingSouth` picks the orientation set, so the
-  // print's toes point along the cat's path.
-  function markFor(cat, goingSouth, cb) {
+  // otherwise the bundled sheet. The cell carries its own facing and its own
+  // offset inside the cell; stampPrint applies both.
+  function markFor(cat, cb) {
     if (cat.map.prints) {
-      var set = goingSouth ? cat.map.prints.s : cat.map.prints.n;
-      cb({ url: cat.sheetUrl, map: cat.map, cell: set[Math.floor(Math.random() * set.length)] });
+      var set = cat.map.prints;
+      cb({ url: cat.sheetUrl, map: cat.map, mark: set[Math.floor(Math.random() * set.length)] });
       return;
     }
     loadPrintFallback(function (fallback) {
       if (!fallback) { cb(null); return; }
-      var fset = goingSouth ? fallback.map.prints.s : fallback.map.prints.n;
+      var fset = fallback.map.prints;
       cb({
         url: fallback.url, map: fallback.map,
-        cell: fset[Math.floor(Math.random() * fset.length)]
+        mark: fset[Math.floor(Math.random() * fset.length)]
       });
     });
   }
@@ -489,7 +510,10 @@
     if (el.parentNode) el.parentNode.removeChild(el);
   }
 
-  function stampPrint(cat, goingSouth) {
+  // `headingX`/`headingY` are the cat's travel vector over the stretch since the
+  // last stamp; each mark's own facing is read from its cell, so one stamp per
+  // cell variant still lands pointing the same way as the others.
+  function stampPrint(cat, headingX, headingY) {
     if (!cfg.trail || reducedMotion) return;
     // Capture the stamp point at the triggering step. A fallback sheet load is
     // asynchronous, and reading cat.x/cat.y in the callback would drop the print
@@ -497,7 +521,7 @@
     // first load is in flight are skipped, so a trail never doubles up.
     var x = cat.x - cfg.scale / 2;
     var y = cat.y + cfg.scale * 0.25;
-    markFor(cat, goingSouth, function (mark) {
+    markFor(cat, function (mark) {
       if (!mark) return;
       var size = Math.max(12, Math.round(cfg.scale * 0.75));
       var k = size / 32;
@@ -508,9 +532,19 @@
       el.style.height = size + "px";
       el.style.backgroundImage = "url(" + mark.url + ")";
       el.style.backgroundSize = (mark.map.width * k) + "px " + (mark.map.height * k) + "px";
+      var cell = mark.mark.cell;
       el.style.backgroundPosition =
-        (-mark.cell[0] * mark.map.stride * k) + "px " +
-        (-mark.cell[1] * mark.map.stride * k) + "px";
+        (-cell[0] * mark.map.stride * k) + "px " +
+        (-cell[1] * mark.map.stride * k) + "px";
+      // Turn the mark so its toes point along the way the cat is travelling,
+      // measured against the direction that cell's own art already faces, and
+      // pull the art back over the stamp point first: the sheet draws each print
+      // in a corner of its cell, so without the shift a turn would swing the
+      // mark off the cat (and off the edge of its own box).
+      var rotation = printRotation(headingX, headingY, mark.mark.faces || 0);
+      el.style.transform =
+        "rotate(" + rotation + "deg) translate(" +
+        (-mark.mark.dx * k) + "px," + (-mark.mark.dy * k) + "px)";
       // Stamp behind the cat rather than under it, with a few pixels of scatter
       // so a straight run does not read as a ruled line.
       var jx = (Math.random() - 0.5) * 6, jy = (Math.random() - 0.5) * 6;
@@ -584,12 +618,21 @@
     // real displacement (rather than the step size) keeps a cat pinned against a
     // screen edge — its target still off-screen, so it never idles — from
     // dribbling prints in one spot.
-    var moved = Math.sqrt((cat.x - wasX) * (cat.x - wasX) + (cat.y - wasY) * (cat.y - wasY));
+    var movedX = cat.x - wasX, movedY = cat.y - wasY;
+    var moved = Math.sqrt(movedX * movedX + movedY * movedY);
     cat.trailAcc += moved;
+    // Direction comes from the whole stretch since the last print rather than the
+    // last step, so a cat weaving slightly along its path still leaves prints
+    // pointing the way it is actually going. dx/dy point from the cat to its
+    // target, so travel is their negation.
+    cat.trailDx += movedX;
+    cat.trailDy += movedY;
     if (moved > 0.5 && cat.trailAcc >= TRAIL_SPACING) {
       cat.trailAcc -= TRAIL_SPACING;
-      // dx/dy point from the cat to its target, so travel is their negation.
-      stampPrint(cat, printFacesSouth(-dx, -dy, dist));
+      var tx = cat.trailDx, ty = cat.trailDy;
+      if (Math.abs(tx) < 0.5 && Math.abs(ty) < 0.5) { tx = -dx; ty = -dy; }
+      cat.trailDx = 0; cat.trailDy = 0;
+      stampPrint(cat, tx, ty);
     }
     position(cat);
   }

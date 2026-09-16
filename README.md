@@ -39,17 +39,24 @@ any note.
 
 ## Paw prints
 
-A running cat leaves a fading trail of paw prints. The marks are the eight cells
-of row 4 in a classic sheet — four variants facing south, plus the same four
-rotated to face north — so the trail reuses the sheet's own pixel art instead of
-shipping a separate asset.
+A running cat leaves a fading trail of paw prints. The marks are row 4 of a
+classic sheet — four paw-print variants, drawn facing south — so the trail reuses
+the sheet's own pixel art instead of shipping a separate asset.
 
-The art has no east/west print, so a print encodes the vertical part of a
-journey: a steep step picks the set that matches its direction, using the same
-0.5 threshold as the walk sprites, and a mostly-horizontal run leans on its
-horizontal direction instead (east reads as south, west as north). A print never
-disagrees with the pose the cat is showing, but a purely sideways run is
-approximated.
+Every mark is turned to the direction the cat is travelling, so the toes point
+along the path. The heading comes from the whole stretch of travel since the last
+print rather than the last step, so a cat weaving slightly still leaves prints
+pointing where it is going, and it is rounded to 45deg steps — the eight
+directions a cat walks — which keeps quarter turns exactly on the pixel grid and
+gives a diagonal the same nearest-neighbour turn the rest of the pixel art gets.
+
+The four cell variants are not drawn the same way round (one faces south, the
+others south-east, east and north-east), and each draws its print in a corner of
+its cell. Both facts are measured from the shipped art and declared with the
+cells, so a stamp is nudged back over the cat and turned by the difference
+between the cat's heading and that cell's own facing. Both are covered by tests
+that re-measure the bundled sheets, so the trail cannot silently go back to
+pointing at random.
 
 A sheet with no effects row (every 4-row oneko sheet, which is the usual shape of
 a brought-your-own sheet) and a short classic sheet whose row 4 is not prints

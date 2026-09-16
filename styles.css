@@ -27,7 +27,8 @@
   background-repeat: no-repeat;
   background-color: transparent;
   z-index: 2147482900;    /* under the cats, over page content */
-  will-change: opacity;
+  transform-origin: center;   /* the script rotates a mark to the cat's heading */
+  will-change: opacity, transform;
 }
 
 /* Respect the visitor's motion preference: the script holds a static idle
