@@ -85,6 +85,11 @@ describe("tintFor: distinguishes a real colour from an absent or broken one", ()
     expect(a.tintFor("nigel")).toBe("#8b6bd6");
   });
 
+  it("matches per-skin tints case-insensitively, like resolved skin ids", () => {
+    const a = load({ tint: "", tints: { Greta: "#a06cd5" } });
+    expect(a.tintFor("greta")).toBe("#a06cd5");
+  });
+
   it("accepts both hex lengths, with or without the leading hash", () => {
     expect(load({ tint: "#8B6BD6" }).tintFor("x")).toBe("#8b6bd6");
     expect(load({ tint: "abc" }).tintFor("x")).toBe("#abc");
@@ -140,6 +145,33 @@ describe("tintFrames: re-hues the cat without flattening it", () => {
     const { px, get } = sheet();
     api.tintFrames(px, W, H, "#a06cd5", [0, 1], STRIDE);
     expect(get(1, 1).slice(0, 3)).toEqual([0xa0, 0x6c, 0xd5]);   // brightest fur is exactly the tint
+  });
+
+  it("keeps shading on a fully-saturated light tint instead of flattening it", () => {
+    // #ffff00 has two channels pinned at 255, which a white-mix darkening cannot
+    // move, so a mix-only approach flattened every fur pixel to the same yellow.
+    // Darkening by scaling keeps the shading.
+    const { px, get } = sheet();
+    api.tintFrames(px, W, H, "#ffff00", [0, 1], STRIDE);
+    const bright = get(1, 1).slice(0, 3), shaded = get(2, 1).slice(0, 3);
+    expect(bright).toEqual([255, 255, 0]);
+    expect(lum(...shaded)).toBeLessThan(lum(...bright));          // shading survived
+    expect(Math.abs(shaded[0] - shaded[1])).toBeLessThanOrEqual(2); // same yellow hue
+    expect(shaded[2]).toBe(0);
+  });
+
+  it("never blows a near-white tint into a saturated colour on shaded fur", () => {
+    // #fffffe has (255 - tintLum) ~ 0.0003, so the old white-mix darkening made
+    // w explode and shaded fur clamp to (255,255,0). Scaling keeps it grey.
+    const { px, get } = sheet();
+    api.tintFrames(px, W, H, "#fffffe", [0, 1], STRIDE);
+    const bright = get(1, 1).slice(0, 3), shaded = get(2, 1).slice(0, 3);
+    expect(bright).toEqual([255, 255, 254]);
+    const [r, g, b] = shaded;
+    expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThanOrEqual(2); // neutral grey
+    expect(r).toBeLessThan(200);                                          // clearly shaded
+    expect(lum(...shaded)).toBeLessThan(lum(...bright));
+    expect(lum(...shaded)).toBeGreaterThanOrEqual(api.FLOOR_LUM);
   });
 
   it("keeps every fur pixel above the outline for a very dark colour", () => {

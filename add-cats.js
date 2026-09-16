@@ -49,15 +49,7 @@
   } catch (e) { cfg.speeds = {}; }
   try {
     var tintMap = JSON.parse(script.dataset.tints || "{}");
-    if (tintMap && typeof tintMap === "object") {
-      // Skin ids are lowercased when resolved, so a tints key must match that
-      // or {"Greta": ...} would silently never reach skin "greta".
-      for (var tintKey in tintMap) {
-        if (Object.prototype.hasOwnProperty.call(tintMap, tintKey)) {
-          cfg.tints[String(tintKey).toLowerCase()] = tintMap[tintKey];
-        }
-      }
-    }
+    if (tintMap && typeof tintMap === "object") cfg.tints = tintMap;
   } catch (e) { cfg.tints = {}; }
 
   // A skin value is either a single id, the word "random" (any bundled or
@@ -229,13 +221,22 @@
     var map = cfg.tints || {};
     // A per-skin entry that is present is authoritative: an empty or invalid
     // value means "no tint for this skin", never "fall back to the global
-    // colour". Only an absent entry uses the global tint.
-    var hex;
-    if (Object.prototype.hasOwnProperty.call(map, id)) {
-      hex = String(map[id]).trim().toLowerCase();
+    // colour". Only an absent entry uses the global tint. Skin ids are resolved
+    // to lower case, so a key is matched case-insensitively too: {"Greta": ...}
+    // must reach skin "greta".
+    var key = String(id).toLowerCase();
+    var val;
+    if (Object.prototype.hasOwnProperty.call(map, key)) {
+      val = map[key];
     } else {
-      hex = String(cfg.tint || "").trim().toLowerCase();
+      for (var tintKey in map) {
+        if (Object.prototype.hasOwnProperty.call(map, tintKey) &&
+            String(tintKey).toLowerCase() === key) {
+          val = map[tintKey]; break;
+        }
+      }
     }
+    var hex = String(val === undefined ? cfg.tint || "" : val).trim().toLowerCase();
     if (!hex) return "";
     if (hex.charAt(0) !== "#") hex = "#" + hex;
     return /^#([0-9a-f]{3}|[0-9a-f]{6})$/.test(hex) ? hex : "";
@@ -272,8 +273,12 @@
   // are left exactly as they were. The fur band (OUTLINE_LUM, 255] is mapped
   // onto [FLOOR_LUM, hi], where hi is the tint's own luminance when that is
   // above the floor, so no fur pixel can sink into the outline band even on a
-  // shaded sheet. The mapping mixes the tint toward white by a factor w (negative
-  // for light tints, which darkens them), preserving the tint's hue.
+  // shaded sheet. A pixel that is darker than the tint is darkened by SCALING
+  // the tint (hue-exact, so a fully-saturated or near-white tint keeps its
+  // shading instead of flattening or blowing out); a pixel that must be lighter
+  // than the tint is mixed toward white, which only happens for tints darker
+  // than the floor and compresses them to a flat, readable body rather than a
+  // silhouette.
   function tintFrames(px, width, height, hex, rows, stride) {
     var rgb = hexToRgb(hex);
     var tintLum = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
@@ -287,10 +292,22 @@
         if (p <= OUTLINE_LUM) continue;
         var t = (p - OUTLINE_LUM) / (255 - OUTLINE_LUM);
         var target = FLOOR_LUM + t * (hi - FLOOR_LUM);
-        var w = (target - tintLum) / (255 - tintLum);
-        px[i]     = Math.ceil(rgb[0] + (255 - rgb[0]) * w);
-        px[i + 1] = Math.ceil(rgb[1] + (255 - rgb[1]) * w);
-        px[i + 2] = Math.ceil(rgb[2] + (255 - rgb[2]) * w);
+        if (target <= tintLum) {
+          // darken by scaling the tint: hue is exact, every channel scales, so a
+          // channel pinned at 255 in the tint can still darken (target <= tintLum
+          // implies tintLum >= FLOOR_LUM > 0, so this cannot divide by zero)
+          var k = target / tintLum;
+          px[i]     = Math.ceil(rgb[0] * k);
+          px[i + 1] = Math.ceil(rgb[1] * k);
+          px[i + 2] = Math.ceil(rgb[2] * k);
+        } else {
+          // lighten toward white: only reachable for tints darker than the
+          // floor, where w is small and non-negative and cannot blow out
+          var w = (target - tintLum) / (255 - tintLum);
+          px[i]     = Math.ceil(rgb[0] + (255 - rgb[0]) * w);
+          px[i + 1] = Math.ceil(rgb[1] + (255 - rgb[1]) * w);
+          px[i + 2] = Math.ceil(rgb[2] + (255 - rgb[2]) * w);
+        }
       }
     }
     return px;

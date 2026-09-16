@@ -206,8 +206,6 @@ describe("client behavior (source contract)", () => {
     expect(clientSrc).toContain("catRowsOf(map)");
     expect(clientSrc).toContain("rows.indexOf(Math.floor(y / stride)) === -1");
     expect(template).toContain("data-tint");
-    // Per-skin keys are normalized to lower case so they match resolved skin ids.
-    expect(clientSrc).toContain("cfg.tints[String(tintKey).toLowerCase()] = tintMap[tintKey]");
   });
 
   it("fetches only the configured sheets and makes no other requests", () => {
