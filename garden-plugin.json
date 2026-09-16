@@ -1,15 +1,21 @@
 {
   "id": "add-cats",
   "name": "Add Cats",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Resident pixel cats that appear on tagged pages, stay, and run to wherever visitors click. Bundled public-domain Neko skins plus bring-your-own sprite sheets.",
   "author": "Paolo Gabriel",
   "slots": {
     "common.footer": "templates/cats.njk"
   },
-  "styles": ["styles.css"],
-  "scripts": ["add-cats.js"],
-  "assets": ["assets/"],
+  "styles": [
+    "styles.css"
+  ],
+  "scripts": [
+    "add-cats.js"
+  ],
+  "assets": [
+    "assets/"
+  ],
   "settings": [
     {
       "key": "enabled",
@@ -41,7 +47,10 @@
       "description": "clicked: nearest cat walks to the click. stampede: all cats run to the click at their own speed.",
       "type": "select",
       "default": "clicked",
-      "options": ["clicked", "stampede"],
+      "options": [
+        "clicked",
+        "stampede"
+      ],
       "env": "ADD_CATS_SUMMON_MODE"
     },
     {
@@ -61,6 +70,22 @@
       "env": "ADD_CATS_CHROMA_KEY"
     },
     {
+      "key": "tint",
+      "name": "Fur color",
+      "description": "Optional hex color applied to the cat frames, e.g. #8b6bd6. Works best on the near-white classic sheets: the outline, shading and anti-aliasing are preserved and only the hue changes. Very dark colors are lifted slightly so the cat stays readable against its outline. Leave empty to draw the sheet as it is.",
+      "type": "text",
+      "default": "",
+      "env": "ADD_CATS_TINT"
+    },
+    {
+      "key": "tints",
+      "name": "Per-skin fur colors",
+      "description": "Optional JSON map of skin id to hex color, e.g. {\"greta\":\"#a06cd5\"}. Overrides the tint setting for that skin, so two pinned cats can wear different colors.",
+      "type": "text",
+      "default": "",
+      "env": "ADD_CATS_TINTS"
+    },
+    {
       "key": "skins",
       "name": "Sprite sheets",
       "description": "Bring-your-own sprite sheets. Map a skin id to an absolute HTTP(S) URL or site-root-relative path of a PNG sprite sheet. Example {\"calico\":\"/nekos/calico.png\"}. Share the id via the skin setting. Sheets may use the classic Neko layout (263x197) or the oneko layout (256x128); both are auto-detected. Public-domain classic skins: https://bomvel.neocities.org/neko/",
@@ -77,5 +102,8 @@
       "env": "ADD_CATS_SPEEDS"
     }
   ],
-  "noteSettings": ["dgAddCats", "dg-add-cats"]
+  "noteSettings": [
+    "dgAddCats",
+    "dg-add-cats"
+  ]
 }

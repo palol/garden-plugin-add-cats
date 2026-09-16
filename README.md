@@ -74,6 +74,43 @@ and register it with the `skins` setting. If the sheet has a flat background
 color instead of transparency, set `chromaKey` to that color and the plugin keys
 it out.
 
+### Any colour you like
+
+A sheet can be re-hued in the browser, so there is no need to paint a recolour
+for every colour you want. Set `tint` to a hex colour and the cat frames come out
+in it:
+
+```json
+{ "tint": "#8b6bd6" }
+```
+
+Each pixel keeps its own brightness and only its hue changes, so the shading,
+anti-aliasing and the outline are preserved rather than flattened. Only the
+frames the plugin actually draws cats from are touched, so the effects and text
+frames in the lower rows of a classic sheet keep their own colours.
+
+Give one skin its own colour with `tints`, which wins over `tint` for that skin:
+
+```json
+{ "tints": "{\"greta\":\"#a06cd5\",\"nigel\":\"#5c6b73\"}" }
+```
+
+Worth knowing before you pick a colour:
+
+- **Intended for the near-white classic sheets.** Re-hueing an already-coloured
+  sheet such as `ginger` or `biscuit` muddies it, because the tint replaces the
+  hue that sheet already carries.
+- **Very dark colours are lifted slightly.** Below roughly `#3d3d4d` the fur
+  would collapse into the outline and the cat would read as a silhouette, so the
+  ramp is raised just enough to stay readable. Your hue is unchanged; only its
+  lightness is.
+- **A cross-origin sheet needs CORS to load at all.** The plugin asks for pixel
+  access from such a sheet, and a host that serves its sheet without
+  `Access-Control-Allow-Origin` will not render that cat, tinted or not. This is
+  the same requirement `chromaKey` already had, not something tint introduces.
+- Recolouring happens in the browser, so no recoloured sheets ship with the
+  plugin and nothing is generated ahead of time.
+
 ## Settings
 
 Digital Garden hosts do not yet render a full settings panel, so environment
@@ -90,6 +127,8 @@ which take precedence over the defaults below.
 | `skin` | random | Skin id, `random` for a mix, or a JSON array of ids to pin distinct named cats |
 | `speeds` | (empty) | JSON map of skin id to walk speed in px/step, e.g. `{"nigel":13}`; absent skins use a random 5–14 |
 | `chromaKey` | (empty) | Hex color removed from a sheet that has a flat background |
+| `tint` | (empty) | Hex color applied to the cat frames, e.g. `#8b6bd6`; best on near-white sheets |
+| `tints` | (empty) | JSON map of skin id to hex color, overriding `tint` for that skin |
 | `skins` | (empty) | JSON map of skin id to sprite-sheet URL or path |
 
 Environment names use the `ADD_CATS_` prefix, such as `ADD_CATS_COUNT` and
@@ -126,5 +165,7 @@ Neko Archive linked above). The `ginger`, `smokey`, `midnight` and `biscuit`
 skins are recolours of that same public-domain sheet. Other skins in the
 archive are owned by their respective authors and are deliberately not bundled
 — add them yourself with the `skins` setting if you have the right to. The
+`tint` setting recolours a sheet in the browser at load time, so it produces no
+new artwork and ships no additional sheets. The
 wandering and click-to-direct behavior follows oneko.js by adryd (MIT), the
 reference web implementation of the original Neko program.

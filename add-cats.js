@@ -34,8 +34,10 @@
     skin: resolveSkin(script.dataset.skin),
     assets: script.dataset.assets || "/plugins/add-cats/assets/",
     chromaKey: script.dataset.chromaKey || "",
+    tint: script.dataset.tint || "",
     skins: {},
-    speeds: {}
+    speeds: {},
+    tints: {}
   };
   try {
     var parsed = JSON.parse(script.dataset.skins || "{}");
@@ -45,6 +47,10 @@
     var speedMap = JSON.parse(script.dataset.speeds || "{}");
     if (speedMap && typeof speedMap === "object") cfg.speeds = speedMap;
   } catch (e) { cfg.speeds = {}; }
+  try {
+    var tintMap = JSON.parse(script.dataset.tints || "{}");
+    if (tintMap && typeof tintMap === "object") cfg.tints = tintMap;
+  } catch (e) { cfg.tints = {}; }
 
   // A skin value is either a single id, the word "random" (any bundled or
   // configured skin), or a JSON array of ids — used to pin distinct named
@@ -151,8 +157,10 @@
     return list;
   }
 
-  // Load a sheet, resolve its layout, and optionally chroma-key it.
-  function loadSheet(url, cb) {
+  // Load a sheet, resolve its layout, then key out its background and/or re-hue
+  // its cat frames. Both edits need pixel access, so they share one canvas pass.
+  // `id` selects the skin's tint.
+  function loadSheet(url, id, cb) {
     var img = new Image();
     if (/^https?:/i.test(url) && url.indexOf(location.origin) !== 0) {
       img.crossOrigin = "anonymous";
@@ -167,19 +175,25 @@
         width: img.naturalWidth, height: img.naturalHeight,
         frames: base.frames
       };
-      if (cfg.chromaKey) {
+      var tint = tintFor(id);
+      if (cfg.chromaKey || tint) {
         try {
           var canvas = document.createElement("canvas");
           canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
           var ctx = canvas.getContext("2d");
           ctx.drawImage(img, 0, 0);
           var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          var key = hexToRgb(cfg.chromaKey);
           var px = data.data;
-          for (var i = 0; i < px.length; i += 4) {
-            if (px[i + 3] > 0 && near(px[i], px[i + 1], px[i + 2], key)) {
-              px[i + 3] = 0;
+          if (cfg.chromaKey) {
+            var key = hexToRgb(cfg.chromaKey);
+            for (var i = 0; i < px.length; i += 4) {
+              if (px[i + 3] > 0 && near(px[i], px[i + 1], px[i + 2], key)) {
+                px[i + 3] = 0;
+              }
             }
+          }
+          if (tint) {
+            tintFrames(px, canvas.width, canvas.height, tint, catRowsOf(map), map.stride);
           }
           ctx.putImageData(data, 0, 0);
           return cb(canvas.toDataURL("image/png"), map);
@@ -198,6 +212,105 @@
   }
   function near(r, g, b, key) {
     return Math.abs(r - key[0]) < 60 && Math.abs(g - key[1]) < 60 && Math.abs(b - key[2]) < 60;
+  }
+
+  // A skin's tint: the per-skin map wins, then the single tint setting. Values
+  // are validated, so a typo in settings degrades to "no tint" rather than to a
+  // broken sheet.
+  function tintFor(id) {
+    var map = cfg.tints || {};
+    // A per-skin entry that is present is authoritative: an empty or invalid
+    // value means "no tint for this skin", never "fall back to the global
+    // colour". Only an absent entry uses the global tint. Skin ids are resolved
+    // to lower case, so a key is matched case-insensitively too: {"Greta": ...}
+    // must reach skin "greta".
+    var key = String(id).toLowerCase();
+    var val;
+    if (Object.prototype.hasOwnProperty.call(map, key)) {
+      val = map[key];
+    } else {
+      for (var tintKey in map) {
+        if (Object.prototype.hasOwnProperty.call(map, tintKey) &&
+            String(tintKey).toLowerCase() === key) {
+          val = map[tintKey]; break;
+        }
+      }
+    }
+    var hex = String(val === undefined ? cfg.tint || "" : val).trim().toLowerCase();
+    if (!hex) return "";
+    if (hex.charAt(0) !== "#") hex = "#" + hex;
+    return /^#([0-9a-f]{3}|[0-9a-f]{6})$/.test(hex) ? hex : "";
+  }
+
+  // The rows a layout actually draws cats from. Every mapped cell in both
+  // layouts sits in the top four rows; the lower rows of a classic sheet hold
+  // effects and text frames, which must keep their own colours.
+  function catRowsOf(map) {
+    var rows = [];
+    for (var name in map.frames) {
+      if (map.frames[name]) {
+        for (var f = 0; f < map.frames[name].length; f++) {
+          var r = map.frames[name][f][1];
+          if (rows.indexOf(r) === -1) rows.push(r);
+        }
+      }
+    }
+    return rows;
+  }
+
+  // Pixels at or below this luminance are the outline and the dark details.
+  var OUTLINE_LUM = 60;
+  // Every fur pixel is kept at or above this floor, so a tinted cat always reads
+  // against its outline. For a tint lighter than the floor the brightest fur
+  // lands on the tint's own colour and shading is preserved; for a tint darker
+  // than the floor there is not enough range to keep both, so the fur is
+  // compressed up to the floor and the cat renders as a flat body with its
+  // outline intact rather than as a silhouette.
+  var FLOOR_LUM = 84;
+
+  // Re-hue the cat frames to `hex`: each pixel keeps its own luminance and only
+  // its colour changes, so shading and anti-aliasing survive, and outline pixels
+  // are left exactly as they were. The fur band (OUTLINE_LUM, 255] is mapped
+  // onto [FLOOR_LUM, hi], where hi is the tint's own luminance when that is
+  // above the floor, so no fur pixel can sink into the outline band even on a
+  // shaded sheet. A pixel that is darker than the tint is darkened by SCALING
+  // the tint (hue-exact, so a fully-saturated or near-white tint keeps its
+  // shading instead of flattening or blowing out); a pixel that must be lighter
+  // than the tint is mixed toward white, which only happens for tints darker
+  // than the floor and compresses them to a flat, readable body rather than a
+  // silhouette.
+  function tintFrames(px, width, height, hex, rows, stride) {
+    var rgb = hexToRgb(hex);
+    var tintLum = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+    var hi = tintLum > FLOOR_LUM ? tintLum : FLOOR_LUM;
+    for (var y = 0; y < height; y++) {
+      if (rows.indexOf(Math.floor(y / stride)) === -1) continue;
+      for (var x = 0; x < width; x++) {
+        var i = (y * width + x) * 4;
+        if (px[i + 3] === 0) continue;
+        var p = 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2];
+        if (p <= OUTLINE_LUM) continue;
+        var t = (p - OUTLINE_LUM) / (255 - OUTLINE_LUM);
+        var target = FLOOR_LUM + t * (hi - FLOOR_LUM);
+        if (target <= tintLum) {
+          // darken by scaling the tint: hue is exact, every channel scales, so a
+          // channel pinned at 255 in the tint can still darken (target <= tintLum
+          // implies tintLum >= FLOOR_LUM > 0, so this cannot divide by zero)
+          var k = target / tintLum;
+          px[i]     = Math.ceil(rgb[0] * k);
+          px[i + 1] = Math.ceil(rgb[1] * k);
+          px[i + 2] = Math.ceil(rgb[2] * k);
+        } else {
+          // lighten toward white: only reachable for tints darker than the
+          // floor, where w is small and non-negative and cannot blow out
+          var w = (target - tintLum) / (255 - tintLum);
+          px[i]     = Math.ceil(rgb[0] + (255 - rgb[0]) * w);
+          px[i + 1] = Math.ceil(rgb[1] + (255 - rgb[1]) * w);
+          px[i + 2] = Math.ceil(rgb[2] + (255 - rgb[2]) * w);
+        }
+      }
+    }
+    return px;
   }
 
   /* ---- cats ---------------------------------------------------------- */
@@ -360,7 +473,7 @@
       }
       return;
     }
-    loadSheet(sheetUrl(skinsToSpawn[index]), function (url, loadedMap) {
+    loadSheet(sheetUrl(skinsToSpawn[index]), skinsToSpawn[index], function (url, loadedMap) {
       if (url && loadedMap) makeCat(url, loadedMap, skinsToSpawn[index]);
       spawn(skinsToSpawn, index + 1, map, sheet);
     });
