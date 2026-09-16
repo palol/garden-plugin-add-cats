@@ -316,6 +316,36 @@ describe("client trail behaviour", () => {
     expect(clientSrc).toContain("stampPrint(cat, tx, ty);");
   });
 
+  it("trails a print behind the cat, whichever way it is running", () => {
+    const point = extractFn("stampPoint");
+    const SIZE = 24, BACK = 11.2;
+    const centreOf = (p) => [p.x + SIZE / 2, p.y + SIZE / 2];
+    // Regression: the stamp used a fixed offset south of the cat, so only a
+    // northward run trailed (everything else left prints beside or ahead of it).
+    for (const [name, hx, hy, dx, dy] of [
+      ["east", 10, 0, -1, 0],
+      ["west", -10, 0, 1, 0],
+      ["south", 0, 10, 0, -1],
+      ["north", 0, -10, 0, 1],
+      ["south-east", 10, 10, -1, -1],
+      ["north-west", -10, -10, 1, 1]
+    ]) {
+      const [cx0, cy0] = centreOf(point(200, 200, hx, hy, BACK, SIZE));
+      const moved = [cx0 - 200, cy0 - 200];
+      const behind = moved[0] * dx + moved[1] * dy;
+      expect(behind, `${name} trails behind`).toBeGreaterThan(0);
+      // A diagonal keeps the same trailing distance, split across both axes.
+      expect(Math.hypot(moved[0], moved[1]), `${name} distance`).toBeCloseTo(BACK, 1);
+    }
+    // No heading to follow: fall back to the old southward trail.
+    expect(centreOf(point(200, 200, 0, 0, BACK, SIZE))).toEqual([200, 200 - BACK]);
+  });
+
+  it("stamps from the heading, not a fixed offset", () => {
+    expect(clientSrc).toContain("var at = stampPoint(cat.x, cat.y, headingX, headingY, cfg.scale * 0.35, size);");
+    expect(clientSrc).not.toContain("cat.y + cfg.scale * 0.25");
+  });
+
   it("measures real displacement, so a clamped cat stamps nothing", () => {
     expect(clientSrc).toContain("cat.trailAcc += moved;");
     expect(clientSrc).toContain("if (moved > 0.5 && cat.trailAcc >= TRAIL_SPACING)");

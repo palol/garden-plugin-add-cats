@@ -62,6 +62,12 @@ A sheet with no effects row (every 4-row oneko sheet, which is the usual shape o
 a brought-your-own sheet) and a short classic sheet whose row 4 is not prints
 borrow from the bundled classic sheet, so a brought-your-own cat gets a trail too.
 
+A print lands where the cat's paws have just been: the stamp point is the cat's
+centre pulled back along its heading, so the mark sits behind a cat running east,
+west or south as well as north. A fixed offset (for example a little below the
+cat) only ever trails in one direction — it leaves the print beside or ahead of
+the cat in every other one.
+
 A print is stamped every 26px of travel, so a fast cat and a slow cat leave the
 same rhythm of marks, and at most 24 prints are alive at once — the oldest
 retires first, so a long run cannot grow the DOM without bound. `trailFade` sets

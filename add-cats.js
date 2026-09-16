@@ -510,20 +510,32 @@
     if (el.parentNode) el.parentNode.removeChild(el);
   }
 
+  // Where a print lands, given the cat's centre and the heading it is travelling
+  // on: centred on the cat and pulled back along that heading, so the mark sits
+  // where the cat's paws have just been. A fixed downward offset cannot do this —
+  // it trails correctly for a cat running north and lands the print beside or
+  // ahead of the cat in every other direction.
+  function stampPoint(cx, cy, headingX, headingY, back, size) {
+    var len = Math.sqrt(headingX * headingX + headingY * headingY);
+    var hx = len > 0 ? headingX / len : 0;
+    var hy = len > 0 ? headingY / len : 1;   // no heading: trail south, as before
+    return { x: cx - hx * back - size / 2, y: cy - hy * back - size / 2 };
+  }
+
   // `headingX`/`headingY` are the cat's travel vector over the stretch since the
   // last stamp; each mark's own facing is read from its cell, so one stamp per
   // cell variant still lands pointing the same way as the others.
   function stampPrint(cat, headingX, headingY) {
     if (!cfg.trail || reducedMotion) return;
+    var size = Math.max(12, Math.round(cfg.scale * 0.75));
     // Capture the stamp point at the triggering step. A fallback sheet load is
     // asynchronous, and reading cat.x/cat.y in the callback would drop the print
     // a few frames behind where the cat actually was. Prints landing while that
     // first load is in flight are skipped, so a trail never doubles up.
-    var x = cat.x - cfg.scale / 2;
-    var y = cat.y + cfg.scale * 0.25;
+    var at = stampPoint(cat.x, cat.y, headingX, headingY, cfg.scale * 0.35, size);
+    var x = at.x, y = at.y;
     markFor(cat, function (mark) {
       if (!mark) return;
-      var size = Math.max(12, Math.round(cfg.scale * 0.75));
       var k = size / 32;
       var el = document.createElement("div");
       el.className = "add-cats-print";
