@@ -49,7 +49,15 @@
   } catch (e) { cfg.speeds = {}; }
   try {
     var tintMap = JSON.parse(script.dataset.tints || "{}");
-    if (tintMap && typeof tintMap === "object") cfg.tints = tintMap;
+    if (tintMap && typeof tintMap === "object") {
+      // Skin ids are lowercased when resolved, so a tints key must match that
+      // or {"Greta": ...} would silently never reach skin "greta".
+      for (var tintKey in tintMap) {
+        if (Object.prototype.hasOwnProperty.call(tintMap, tintKey)) {
+          cfg.tints[String(tintKey).toLowerCase()] = tintMap[tintKey];
+        }
+      }
+    }
   } catch (e) { cfg.tints = {}; }
 
   // A skin value is either a single id, the word "random" (any bundled or
@@ -219,7 +227,15 @@
   // broken sheet.
   function tintFor(id) {
     var map = cfg.tints || {};
-    var hex = String(map[id] || cfg.tint || "").trim().toLowerCase();
+    // A per-skin entry that is present is authoritative: an empty or invalid
+    // value means "no tint for this skin", never "fall back to the global
+    // colour". Only an absent entry uses the global tint.
+    var hex;
+    if (Object.prototype.hasOwnProperty.call(map, id)) {
+      hex = String(map[id]).trim().toLowerCase();
+    } else {
+      hex = String(cfg.tint || "").trim().toLowerCase();
+    }
     if (!hex) return "";
     if (hex.charAt(0) !== "#") hex = "#" + hex;
     return /^#([0-9a-f]{3}|[0-9a-f]{6})$/.test(hex) ? hex : "";
@@ -243,20 +259,25 @@
 
   // Pixels at or below this luminance are the outline and the dark details.
   var OUTLINE_LUM = 60;
-  // How far the brightest fur must sit above the outline to stay readable.
-  var CONTRAST_MARGIN = 24;
+  // Every fur pixel is kept at or above this floor, so a tinted cat always reads
+  // against its outline. For a tint lighter than the floor the brightest fur
+  // lands on the tint's own colour and shading is preserved; for a tint darker
+  // than the floor there is not enough range to keep both, so the fur is
+  // compressed up to the floor and the cat renders as a flat body with its
+  // outline intact rather than as a silhouette.
+  var FLOOR_LUM = 84;
 
-  // Re-hue the cat frames to `hex` without flattening them: each pixel keeps its
-  // own luminance and only its colour changes, so shading and anti-aliasing
-  // survive, and outline pixels are left exactly as they were. A colour darker
-  // than the outline band would collapse the fur into the outline and read as a
-  // silhouette, so such a tint is mixed toward white just enough to clear it:
-  // the hue is still the requested one, only its lightness is raised.
+  // Re-hue the cat frames to `hex`: each pixel keeps its own luminance and only
+  // its colour changes, so shading and anti-aliasing survive, and outline pixels
+  // are left exactly as they were. The fur band (OUTLINE_LUM, 255] is mapped
+  // onto [FLOOR_LUM, hi], where hi is the tint's own luminance when that is
+  // above the floor, so no fur pixel can sink into the outline band even on a
+  // shaded sheet. The mapping mixes the tint toward white by a factor w (negative
+  // for light tints, which darkens them), preserving the tint's hue.
   function tintFrames(px, width, height, hex, rows, stride) {
     var rgb = hexToRgb(hex);
     var tintLum = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
-    var floor = OUTLINE_LUM + CONTRAST_MARGIN;
-    var lift = tintLum >= floor ? 0 : (floor - tintLum) / Math.max(255 - tintLum, 1);
+    var hi = tintLum > FLOOR_LUM ? tintLum : FLOOR_LUM;
     for (var y = 0; y < height; y++) {
       if (rows.indexOf(Math.floor(y / stride)) === -1) continue;
       for (var x = 0; x < width; x++) {
@@ -264,13 +285,12 @@
         if (px[i + 3] === 0) continue;
         var p = 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2];
         if (p <= OUTLINE_LUM) continue;
-        var k = p / 255;
-        for (var c = 0; c < 3; c++) {
-          var base = rgb[c] * k;
-          // ceiled, so the lifted colour cannot round back under the floor it
-          // is there to clear; exact for the unlifted path where k is 1
-          px[i + c] = Math.ceil(base + (255 - base) * lift * k);
-        }
+        var t = (p - OUTLINE_LUM) / (255 - OUTLINE_LUM);
+        var target = FLOOR_LUM + t * (hi - FLOOR_LUM);
+        var w = (target - tintLum) / (255 - tintLum);
+        px[i]     = Math.ceil(rgb[0] + (255 - rgb[0]) * w);
+        px[i + 1] = Math.ceil(rgb[1] + (255 - rgb[1]) * w);
+        px[i + 2] = Math.ceil(rgb[2] + (255 - rgb[2]) * w);
       }
     }
     return px;

@@ -22,16 +22,18 @@ function load(cfg) {
     "cfg",
     block +
       "\n  return { hexToRgb: hexToRgb, tintFor: tintFor, catRowsOf: catRowsOf," +
-      " tintFrames: tintFrames, OUTLINE_LUM: OUTLINE_LUM, CONTRAST_MARGIN: CONTRAST_MARGIN };"
+      " tintFrames: tintFrames, OUTLINE_LUM: OUTLINE_LUM, FLOOR_LUM: FLOOR_LUM };"
   )(cfg || {});
 }
 
 const api = load({});
-const CLASSIC = (() => {
-  const start = clientSrc.indexOf("var CLASSIC_MAP = {");
+function extractMap(name) {
+  const start = clientSrc.indexOf(`var ${name} = {`);
   const end = clientSrc.indexOf("\n  };", start);
-  return new Function("return " + clientSrc.slice(start + "var CLASSIC_MAP = ".length, end + 4))();
-})();
+  return new Function("return " + clientSrc.slice(start + `var ${name} = `.length, end + 4))();
+}
+const CLASSIC = extractMap("CLASSIC_MAP");
+const ONEKO = extractMap("ONEKO_MAP");
 
 function hexToHue(hex) {
   const r = parseInt(hex.slice(1, 3), 16) / 255;
@@ -47,6 +49,7 @@ function hexToHue(hex) {
 }
 function pxHue(r, g, b) { return hexToHue("#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")); }
 const lum = (r, g, b) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+const dHue = (a, b) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
 
 // A synthetic sheet: three 33px cell rows, only rows 0 and 1 carrying cat frames.
 const STRIDE = 33, W = 66, H = 99;
@@ -63,16 +66,27 @@ function sheet() {
   return { px, get };
 }
 
-describe("tintFor: validates the colour instead of trusting settings", () => {
+describe("tintFor: distinguishes a real colour from an absent or broken one", () => {
   it("prefers a per-skin colour over the single tint", () => {
     const a = load({ tint: "#111111", tints: { greta: "#222222" } });
     expect(a.tintFor("greta")).toBe("#222222");
     expect(a.tintFor("nigel")).toBe("#111111");
   });
 
+  it("treats an explicit per-skin entry as authoritative, even when empty", () => {
+    const a = load({ tint: "#8b6bd6", tints: { greta: "" } });
+    expect(a.tintFor("greta")).toBe("");          // explicitly no tint for greta
+    expect(a.tintFor("nigel")).toBe("#8b6bd6");   // absent entry falls back to the global
+  });
+
+  it("degrades a per-skin typo to no tint for that skin only", () => {
+    const a = load({ tint: "#8b6bd6", tints: { greta: "#zzz" } });
+    expect(a.tintFor("greta")).toBe("");          // broken override, not a surprise global
+    expect(a.tintFor("nigel")).toBe("#8b6bd6");
+  });
+
   it("accepts both hex lengths, with or without the leading hash", () => {
-    const a = load({ tint: "#8B6BD6" });
-    expect(a.tintFor("x")).toBe("#8b6bd6");
+    expect(load({ tint: "#8B6BD6" }).tintFor("x")).toBe("#8b6bd6");
     expect(load({ tint: "abc" }).tintFor("x")).toBe("#abc");
     expect(load({ tint: "abcdef" }).tintFor("x")).toBe("#abcdef");
   });
@@ -85,13 +99,18 @@ describe("tintFor: validates the colour instead of trusting settings", () => {
 });
 
 describe("catRowsOf: derives the cat rows from the frame map", () => {
-  it("collects only the rows the map actually draws from", () => {
+  it("collects only the rows the classic map actually draws from", () => {
     const rows = api.catRowsOf(CLASSIC);
-    expect(rows.sort()).toEqual([0, 1, 2, 3]);
+    expect(rows.slice().sort()).toEqual([0, 1, 2, 3]);
     // The classic sheet's lower two rows are effects and text, and no frame
     // references them, so a tint must never reach them.
     expect(rows).not.toContain(4);
     expect(rows).not.toContain(5);
+  });
+
+  it("covers all four rows of the oneko layout", () => {
+    const rows = api.catRowsOf(ONEKO);
+    expect(rows.slice().sort()).toEqual([0, 1, 2, 3]);
   });
 });
 
@@ -111,66 +130,93 @@ describe("tintFrames: re-hues the cat without flattening it", () => {
     const bright = get(1, 1), shaded = get(2, 1), row1 = get(1, 40);
     const want = hexToHue("#a06cd5");
     for (const [r, g, b] of [bright, shaded, row1]) {
-      const d = Math.abs(pxHue(r, g, b) - want);
-      expect(Math.min(d, 360 - d), `hue of ${r},${g},${b}`).toBeLessThan(2);
+      expect(dHue(pxHue(r, g, b), want), `hue of ${r},${g},${b}`).toBeLessThan(2);
     }
     // Shading survives: the darker source pixel stays darker than the brighter one.
     expect(lum(...shaded.slice(0, 3))).toBeLessThan(lum(...bright.slice(0, 3)));
   });
 
-  it("keeps a very dark colour readable instead of collapsing into the outline", () => {
-    const { px, get } = sheet();
-    api.tintFrames(px, W, H, "#1f2933", [0, 1], STRIDE);
-    const bright = get(1, 1).slice(0, 3);
-    const floor = api.OUTLINE_LUM + api.CONTRAST_MARGIN;
-    expect(lum(...bright)).toBeGreaterThanOrEqual(floor);
-    // The hue is still the one that was asked for.
-    const d = Math.abs(pxHue(...bright) - hexToHue("#1f2933"));
-    expect(Math.min(d, 360 - d)).toBeLessThan(3);
-  });
-
   it("is faithful for a light colour, with no lifting applied", () => {
     const { px, get } = sheet();
     api.tintFrames(px, W, H, "#a06cd5", [0, 1], STRIDE);
-    const bright = get(1, 1).slice(0, 3);
-    expect(bright).toEqual([0xa0, 0x6c, 0xd5]);   // brightest fur is exactly the tint
+    expect(get(1, 1).slice(0, 3)).toEqual([0xa0, 0x6c, 0xd5]);   // brightest fur is exactly the tint
+  });
+
+  it("keeps every fur pixel above the outline for a very dark colour", () => {
+    // The whole fur band must clear the outline, not just the brightest pixel:
+    // on a shaded sheet a dark tint must not let any fur sink into the outline.
+    const { px, get } = sheet();
+    api.tintFrames(px, W, H, "#1f2933", [0, 1], STRIDE);
+    const floor = api.FLOOR_LUM;
+    for (const [x, y] of [[1, 1], [2, 1], [1, 40]]) {
+      const l = lum(...get(x, y).slice(0, 3));
+      expect(l, `fur at ${x},${y}`).toBeGreaterThanOrEqual(floor);
+    }
+  });
+
+  it("re-hues a stride-32 (oneko) sheet only within its cat rows", () => {
+    const PW = 64, PH = 96;                       // three 32px rows
+    const px = new Uint8ClampedArray(PW * PH * 4);
+    const put = (x, y, r, g, b, a) => { const i = (y * PW + x) * 4; px[i] = r; px[i + 1] = g; px[i + 2] = b; px[i + 3] = a; };
+    const get = (x, y) => { const i = (y * PW + x) * 4; return [px[i], px[i + 1], px[i + 2], px[i + 3]]; };
+    put(1, 1, 255, 255, 255, 255);    // row 0 (cat)
+    put(1, 33, 255, 255, 255, 255);   // row 1 (cat)
+    put(1, 65, 255, 0, 0, 255);       // row 2 (not a cat row)
+    api.tintFrames(px, PW, PH, "#a06cd5", [0, 1], 32);
+    expect(get(1, 1)).toEqual([0xa0, 0x6c, 0xd5, 255]);
+    expect(get(1, 33)).toEqual([0xa0, 0x6c, 0xd5, 255]);
+    expect(get(1, 65)).toEqual([255, 0, 0, 255]);   // untouched
   });
 });
 
 describe("tint against the real bundled sheet", () => {
-  const CLASSIC_MAP = CLASSIC;
-  const rows = api.catRowsOf(CLASSIC_MAP);
-  const sheetPng = () => PNG.sync.read(readFileSync(join(pkg, "assets", "neko.png")));
+  const rows = api.catRowsOf(CLASSIC);
+  const catRowLimit = (rows.reduce((m, r) => Math.max(m, r), 0) + 1) * CLASSIC.stride;
 
-  it("preserves every outline pixel byte for byte and re-hues the fur", () => {
-    const png = sheetPng();
+  function apply(hex) {
+    const png = PNG.sync.read(readFileSync(join(pkg, "assets", "neko.png")));
     const original = Buffer.from(png.data);
-    api.tintFrames(png.data, png.width, png.height, "#2f9e6e", rows, CLASSIC_MAP.stride);
+    api.tintFrames(png.data, png.width, png.height, hex, rows, CLASSIC.stride);
+    return { png, original };
+  }
+
+  it("preserves every outline pixel, re-hues the fur on-hue, and leaves effects rows alone", () => {
+    const { png, original } = apply("#2f9e6e");
     const want = hexToHue("#2f9e6e");
     let outlineKept = 0, fur = 0, furMatched = 0, effectsKept = 0;
-    const catRowLimit = rows.reduce((m, r) => Math.max(m, r), 0) * CLASSIC_MAP.stride + 32;
     for (let y = 0; y < png.height; y++) {
       for (let x = 0; x < png.width; x++) {
         const i = (y * png.width + x) * 4;
-        const same =
-          png.data[i] === original[i] &&
-          png.data[i + 1] === original[i + 1] &&
-          png.data[i + 2] === original[i + 2] &&
-          png.data[i + 3] === original[i + 3];
+        const same = png.data[i] === original[i] && png.data[i + 1] === original[i + 1] &&
+                     png.data[i + 2] === original[i + 2] && png.data[i + 3] === original[i + 3];
         if (y >= catRowLimit) { if (same) effectsKept++; continue; }
-        const a = original[i + 3];
-        if (a === 0) continue;
-        const l = lum(original[i], original[i + 1], original[i + 2]);
-        if (l <= api.OUTLINE_LUM) { if (same) outlineKept++; continue; }
+        if (original[i + 3] === 0) continue;
+        if (lum(original[i], original[i + 1], original[i + 2]) <= api.OUTLINE_LUM) { if (same) outlineKept++; continue; }
         if (same) continue;
         fur++;
-        const d = Math.abs(pxHue(png.data[i], png.data[i + 1], png.data[i + 2]) - want);
-        if (Math.min(d, 360 - d) < 2) furMatched++;
+        if (dHue(pxHue(png.data[i], png.data[i + 1], png.data[i + 2]), want) < 2) furMatched++;
       }
     }
-    expect(outlineKept).toBeGreaterThan(1000);          // outline really is preserved
-    expect(fur).toBeGreaterThan(1000);                  // and fur really is recoloured
-    expect(furMatched).toBe(fur);                       // every recoloured pixel is on-hue
+    expect(outlineKept).toBeGreaterThan(1000);
+    expect(fur).toBeGreaterThan(1000);
+    expect(furMatched).toBe(fur);
     expect(effectsKept).toBe(png.width * (png.height - catRowLimit));
+  });
+
+  it("keeps every fur pixel readable against the outline for a dark tint", () => {
+    const { png, original } = apply("#1f2933");
+    const floor = api.FLOOR_LUM;
+    let minFur = 1e9, fur = 0;
+    for (let y = 0; y < catRowLimit; y++) {
+      for (let x = 0; x < png.width; x++) {
+        const i = (y * png.width + x) * 4;
+        if (original[i + 3] === 0) continue;
+        if (lum(original[i], original[i + 1], original[i + 2]) <= api.OUTLINE_LUM) continue;
+        const l = lum(png.data[i], png.data[i + 1], png.data[i + 2]);
+        fur++; if (l < minFur) minFur = l;
+        expect(l).toBeGreaterThanOrEqual(floor);
+      }
+    }
+    expect(fur).toBeGreaterThan(1000);
   });
 });

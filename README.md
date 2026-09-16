@@ -104,8 +104,10 @@ Worth knowing before you pick a colour:
   would collapse into the outline and the cat would read as a silhouette, so the
   ramp is raised just enough to stay readable. Your hue is unchanged; only its
   lightness is.
-- **A cross-origin sheet cannot be read pixel by pixel without CORS.** Such a
-  sheet still loads and draws fine, so a tint on it simply does nothing.
+- **A cross-origin sheet needs CORS to load at all.** The plugin asks for pixel
+  access from such a sheet, and a host that serves its sheet without
+  `Access-Control-Allow-Origin` will not render that cat, tinted or not. This is
+  the same requirement `chromaKey` already had, not something tint introduces.
 - Recolouring happens in the browser, so no recoloured sheets ship with the
   plugin and nothing is generated ahead of time.
 
