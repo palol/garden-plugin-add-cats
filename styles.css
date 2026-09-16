@@ -13,8 +13,25 @@
   will-change: left, top;
 }
 
+/* Trail marks: one element per print, stamped behind a running cat and faded
+   out by the script. Same fixed-position pixel-art approach as the cat. The
+   translucent plate behind the mark keeps dark outline art readable on a dark
+   page (the same reason the garden's dark mode plates images); override or
+   remove this rule to draw bare prints. */
+.add-cats-print {
+  position: fixed;
+  pointer-events: none;   /* a print never blocks page interaction */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background-repeat: no-repeat;
+  background-color: rgba(255, 255, 255, 0.72);
+  border-radius: 3px;
+  z-index: 2147482900;    /* under the cats, over page content */
+  will-change: opacity;
+}
+
 /* Respect the visitor's motion preference: the script holds a static idle
-   cell instead of cycling walk and idle animations. */
+   cell instead of cycling walk and idle animations, and stamps no prints. */
 @media (prefers-reduced-motion: reduce) {
   .add-cats-cat {
     will-change: auto;

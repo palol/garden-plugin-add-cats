@@ -37,6 +37,35 @@ any note.
 - **clicked** (default) — the nearest cat walks to where you click.
 - **stampede** — every cat runs to the click point, each at its own speed.
 
+## Paw prints
+
+A running cat leaves a fading trail of paw prints. The marks are the eight cells
+of row 4 in a classic sheet — four variants facing south, plus the same four
+rotated to face north — so the trail reuses the sheet's own pixel art instead of
+shipping a separate asset.
+
+The art has no east/west print, so a print encodes the vertical part of a
+journey: a steep step picks the set that matches its direction, using the same
+0.5 threshold as the walk sprites, and a mostly-horizontal run leans on its
+horizontal direction instead (east reads as south, west as north). A print never
+disagrees with the pose the cat is showing, but a purely sideways run is
+approximated.
+
+A sheet with no effects row (every 4-row oneko sheet, which is the usual shape of
+a brought-your-own sheet) and a short classic sheet whose row 4 is not prints
+borrow from the bundled classic sheet, so a brought-your-own cat gets a trail too.
+
+A print is stamped every 26px of travel, so a fast cat and a slow cat leave the
+same rhythm of marks, and at most 24 prints are alive at once — the oldest
+retires first, so a long run cannot grow the DOM without bound. `trailFade` sets
+how long a print takes to fade out, and `trail: false` turns the trail off.
+Nothing is stamped when the visitor prefers reduced motion, which also stops the
+cats from walking.
+
+The stylesheet puts a translucent plate behind each mark so dark outline art
+stays readable on a dark page. Remove the `background-color` on `.add-cats-print`
+to draw bare prints.
+
 ## Skins
 
 Five skins ship with the plugin, all derived from the public-domain classic

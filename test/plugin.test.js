@@ -180,7 +180,9 @@ describe("client behavior (source contract)", () => {
     // speedFor returns a pinned number for a listed skin, else random 5..14.
     expect(clientSrc).toContain("function speedFor(skin)");
     expect(clientSrc).toContain("cfg.speeds && typeof cfg.speeds[skin] === \"number\"");
-    expect(clientSrc).toContain("isFinite(pinned) ? pinned : 5 + Math.random() * 9");
+    // Pinned speeds are floored at 1px so a sub-pixel cat still travels far
+    // enough to leave a trail.
+    expect(clientSrc).toContain("isFinite(pinned) ? Math.max(1, pinned) : 5 + Math.random() * 9");
     expect(clientSrc).toContain("makeCat(url, loadedMap, skinsToSpawn[index])");
     // The slot template passes the speeds map through to the client.
     expect(template).toContain("data-speeds");
@@ -200,7 +202,9 @@ describe("client behavior (source contract)", () => {
     // A malformed colour must degrade to "no tint", never to a broken sheet.
     expect(clientSrc).toContain("/^#([0-9a-f]{3}|[0-9a-f]{6})$/");
     // Chroma keying and re-hueing share one canvas pass, so a sheet is drawn once.
-    expect(clientSrc).toContain("if (cfg.chromaKey || tint)");
+    // `skipKeys` loads a sheet untouched: the bundled sheet a trail borrows
+    // prints from must not be re-keyed or re-hued by the site's own settings.
+    expect(clientSrc).toContain("if (!skipKeys && (cfg.chromaKey || tint))");
     // Only the rows the frame map draws cats from are touched, so the effects
     // and text frames in a classic sheet's lower rows keep their colours.
     expect(clientSrc).toContain("catRowsOf(map)");
