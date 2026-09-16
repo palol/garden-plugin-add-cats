@@ -31,15 +31,45 @@
     count: clampInt(script.dataset.count, 1, 5, 3),
     scale: clampInt(script.dataset.scale, 16, 64, 32),
     mode: script.dataset.mode === "stampede" ? "stampede" : "clicked",
-    skin: (script.dataset.skin || "random").toLowerCase(),
+    skin: resolveSkin(script.dataset.skin),
     assets: script.dataset.assets || "/plugins/add-cats/assets/",
     chromaKey: script.dataset.chromaKey || "",
-    skins: {}
+    skins: {},
+    speeds: {}
   };
   try {
     var parsed = JSON.parse(script.dataset.skins || "{}");
     if (parsed && typeof parsed === "object") cfg.skins = parsed;
   } catch (e) { cfg.skins = {}; }
+  try {
+    var speedMap = JSON.parse(script.dataset.speeds || "{}");
+    if (speedMap && typeof speedMap === "object") cfg.speeds = speedMap;
+  } catch (e) { cfg.speeds = {}; }
+
+  // A skin value is either a single id, the word "random" (any bundled or
+  // configured skin), or a JSON array of ids — used to pin distinct named
+  // cats (e.g. '["greta","nigel"]', one per resident cat, cycling if there
+  // are more cats than ids).
+  function resolveSkin(raw) {
+    var value = (raw || "random").trim().toLowerCase();
+    if (value.charAt(0) === "[") {
+      try {
+        var list = JSON.parse(value);
+        if (Array.isArray(list) && list.length > 0) {
+          return list.map(function (id) { return String(id).toLowerCase(); });
+        }
+      } catch (e) { /* fall through to a single skin id */ }
+      value = "random";
+    } else if (value.charAt(0) === '"') {
+      // The template serializes the value with | dump, so a plain id arrives
+      // JSON-quoted; unwrap it.
+      try {
+        var single = JSON.parse(value);
+        if (typeof single === "string") value = single.toLowerCase();
+      } catch (e) { /* keep the raw value */ }
+    }
+    return value;
+  }
 
   /* ---- frame maps ---------------------------------------------------- */
   /* Coordinates are [column, row] cells. Verified against the canonical
@@ -94,8 +124,11 @@
   // Built-in public-domain skins ship with the plugin as pre-keyed PNGs.
   var BUILTIN = ["neko", "tabby"];
 
+  // Classic sheets are 263px wide (8 columns of 32px plus a 1px separator),
+  // so their width is not a multiple of the 32px cell. oneko sheets are a
+  // clean 256px. Height varies across classic skins, so width is the signal.
   function mapFor(width, height) {
-    if (width >= 250 && height >= 180) return CLASSIC_MAP;
+    if (width > 0 && width % 32 !== 0) return CLASSIC_MAP;
     return ONEKO_MAP;
   }
 
@@ -182,7 +215,7 @@
     return list[Math.floor(Math.random() * list.length)];
   }
 
-  function makeCat(sheetUrl, map) {
+  function makeCat(sheetUrl, map, skin) {
     var el = document.createElement("div");
     el.className = "add-cats-cat";
     el.setAttribute("aria-hidden", "true");
@@ -194,7 +227,7 @@
       el: el, map: map, scale: cfg.scale,
       x: 16 + Math.random() * Math.max(1, window.innerWidth - 64),
       y: 40 + Math.random() * Math.max(1, window.innerHeight - 120),
-      speed: 5 + Math.random() * 9,       // 5..14 px per step, varied per cat
+      speed: speedFor(skin),       // per-skin override or 5..14 px per step
       frame: 0, idle: 0, idleAnim: null, idleAnimFrame: 0
     };
     cat.tx = cat.x; cat.ty = cat.y;
@@ -202,6 +235,12 @@
     setSprite(cat, "idle", 0);
     cats.push(cat);
     return cat;
+  }
+
+  function speedFor(skin) {
+    var pinned = cfg.speeds && typeof cfg.speeds[skin] === "number"
+      ? cfg.speeds[skin] : NaN;
+    return isFinite(pinned) ? pinned : 5 + Math.random() * 9;
   }
 
   function position(cat) {
@@ -311,7 +350,7 @@
       return;
     }
     loadSheet(sheetUrl(skinsToSpawn[index]), function (url, loadedMap) {
-      if (url && loadedMap) makeCat(url, loadedMap);
+      if (url && loadedMap) makeCat(url, loadedMap, skinsToSpawn[index]);
       spawn(skinsToSpawn, index + 1, map, sheet);
     });
   }
@@ -319,7 +358,13 @@
   function boot() {
     var skins = [];
     for (var i = 0; i < cfg.count; i++) {
-      skins.push(cfg.skin === "random" ? randomSkin() : cfg.skin);
+      var pick;
+      if (Array.isArray(cfg.skin)) {
+        pick = cfg.skin[i % cfg.skin.length];
+      } else {
+        pick = cfg.skin === "random" ? randomSkin() : cfg.skin;
+      }
+      skins.push(pick);
     }
     spawn(skins, 0, null, null);
   }

@@ -67,7 +67,15 @@
       "type": "text",
       "default": "",
       "env": "ADD_CATS_SKINS"
+    },
+    {
+      "key": "speeds",
+      "name": "Per-skin speed",
+      "description": "Optional walk speed in pixels per step per skin. Map a skin id to a number, e.g. {\"nigel\":13}. Cats without an entry move at a random 5-14 px speed.",
+      "type": "text",
+      "default": "",
+      "env": "ADD_CATS_SPEEDS"
     }
   ],
-  "noteSettings": ["dgAddCats"]
+  "noteSettings": ["dgAddCats", "dg-add-cats"]
 }

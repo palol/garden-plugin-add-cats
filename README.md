@@ -43,6 +43,16 @@ Two classic skins ship with the plugin: `neko` (black cat) and `tabby`. By
 default each resident cat picks a random bundled skin, so a page shows a mix.
 Set `skin` to pin one skin for every cat.
 
+To pin a specific set of distinct cats, give `skin` a JSON array of skin ids —
+one resident cat per id, cycling if there are more cats than ids:
+
+```json
+{ "skin": "[\"greta\",\"nigel\"]", "skins": "{\"greta\":\"/img/user/greta-neko.png\",\"nigel\":\"/img/user/nigel-neko.png\"}" }
+```
+
+This is how the plugin powers a "Meet the cats" page: Greta and Nigel render
+side by side, each with their own sprite sheet.
+
 ### Bring your own sprite sheet
 
 Any skin can be supplied by the site owner. Point a skin id at a sprite sheet
@@ -76,7 +86,8 @@ which take precedence over the defaults below.
 | `count` | 3 | Residents per tagged page, clamped 1 to 5 |
 | `scale` | 32 | Rendered sprite size in pixels, clamped 16 to 64 |
 | `summonMode` | clicked | `clicked` or `stampede` |
-| `skin` | neko | Skin id, or `random` for a mix of bundled and configured skins |
+| `skin` | random | Skin id, `random` for a mix, or a JSON array of ids to pin distinct named cats |
+| `speeds` | (empty) | JSON map of skin id to walk speed in px/step, e.g. `{"nigel":13}`; absent skins use a random 5–14 |
 | `chromaKey` | (empty) | Hex color removed from a sheet that has a flat background |
 | `skins` | (empty) | JSON map of skin id to sprite-sheet URL or path |
 

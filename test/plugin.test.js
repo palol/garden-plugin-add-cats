@@ -96,6 +96,14 @@ describe("template rendering", () => {
     expect(el.getAttribute("data-mode")).toBe("clicked");
     expect(el.getAttribute("data-skin")).toBe("neko");
     expect(el.getAttribute("data-assets")).toBe("/plugins/add-cats/assets/");
+    // The skins map is a JSON string passed straight through (autoescaped in
+    // the attribute); it must round-trip to a parsed object on the client.
+    const expectedSkins = basePlugin.skins
+      ? JSON.parse(basePlugin.skins)
+      : {};
+    expect(JSON.parse(el.getAttribute("data-skins") || "{}")).toEqual(
+      expectedSkins
+    );
   });
 
   it("escapes a hostile skin map instead of emitting raw markup", () => {
@@ -123,7 +131,28 @@ describe("client behavior (source contract)", () => {
   it("supports both summon modes and auto-detects both sheet layouts", () => {
     expect(clientSrc).toContain('cfg.mode === "stampede"');
     expect(clientSrc).toContain("nearest(x, y)");
-    expect(clientSrc).toContain("mapFor(img.naturalWidth, img.naturalHeight)");
+    // Detection must be width-based: classic sheets are 263px wide (not a
+    // multiple of the 32px cell), oneko sheets are a clean 256px. Height
+    // varies between classic skins, so it cannot be the signal.
+    expect(clientSrc).toContain("width % 32 !== 0");
+  });
+
+  it("lets a skin setting pin distinct named cats via a JSON array", () => {
+    // A JSON-array skin value cycles distinct ids across the resident cats
+    // (e.g. ["greta","nigel"]), so two named cats render side by side.
+    expect(clientSrc).toContain("Array.isArray(cfg.skin)");
+    expect(clientSrc).toContain("cfg.skin[i % cfg.skin.length]");
+    expect(clientSrc).toContain('value.charAt(0) === "["');
+  });
+
+  it("lets a speeds setting pin per-skin walk speed, falling back to random", () => {
+    // speedFor returns a pinned number for a listed skin, else random 5..14.
+    expect(clientSrc).toContain("function speedFor(skin)");
+    expect(clientSrc).toContain("cfg.speeds && typeof cfg.speeds[skin] === \"number\"");
+    expect(clientSrc).toContain("isFinite(pinned) ? pinned : 5 + Math.random() * 9");
+    expect(clientSrc).toContain("makeCat(url, loadedMap, skinsToSpawn[index])");
+    // The slot template passes the speeds map through to the client.
+    expect(template).toContain("data-speeds");
   });
 
   it("fetches only the configured sheets and makes no other requests", () => {
