@@ -62,9 +62,17 @@ how long a print takes to fade out, and `trail: false` turns the trail off.
 Nothing is stamped when the visitor prefers reduced motion, which also stops the
 cats from walking.
 
-The stylesheet puts a translucent plate behind each mark so dark outline art
-stays readable on a dark page. Remove the `background-color` on `.add-cats-print`
-to draw bare prints.
+Prints are drawn as bare sprite pixels: no plate, box or background sits behind
+a mark, so the trail reads as prints on the page rather than as pasted squares.
+A dark theme hides dark art on dark ground, so a site with one should pair the
+marks with its own rule in that theme, for example:
+
+```css
+.theme-dark .add-cats-print { filter: invert(1); }                                  /* light marks */
+.theme-dark .add-cats-print { filter: drop-shadow(0 0 1px rgba(255,255,255,.9)); }   /* soft halo */
+```
+
+Match that selector to whichever class your theme puts on `body` or `html`.
 
 ## Skins
 

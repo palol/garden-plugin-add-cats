@@ -210,6 +210,18 @@ describe("client trail behaviour", () => {
     expect(clientSrc).toContain("return isFinite(pinned) ? Math.max(1, pinned) : 5 + Math.random() * 9;");
   });
 
+  it("draws a print as bare art, with no plate behind the mark", () => {
+    const css = readFileSync(join(pkg, "styles.css"), "utf8");
+    const start = css.indexOf(".add-cats-print {");
+    expect(start, ".add-cats-print rule").toBeGreaterThan(-1);
+    const block = css.slice(start, css.indexOf("}", start));
+    expect(block).toContain("background-color: transparent;");
+    // Regression guard: a plate (or a rounded box) makes every mark read as a
+    // pasted square instead of a paw print.
+    expect(block).not.toMatch(/border-radius/);
+    expect(block).not.toMatch(/rgba\(/);
+  });
+
   it("retires each print after it has faded", () => {
     expect(clientSrc).toContain("setTimeout(function () { removePrint(el); }, cfg.trailFade * 1000 + 80);");
   });
