@@ -19,13 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-Bundled sprite sheets (assets/neko.png, assets/tabby.png) are the classic
-public-domain Neko CG sprites. The classic Neko sprites are considered public
-domain; see https://bomvel.neocities.org/neko/ . They are bundled here so the
-plugin works with no configuration and no third-party requests.
-
-The animation behavior follows oneko.js by adryd (MIT), the reference web
-implementation of the original Neko program.
