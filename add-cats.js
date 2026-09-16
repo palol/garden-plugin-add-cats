@@ -121,10 +121,11 @@
     }
   };
 
-  // Built-in skins: the public-domain classic sheet plus a recoloured
-  // derivative of it (same frames, ginger fur), so a random pick reads as two
-  // visibly different cats. Other archive skins are author-owned, not bundled.
-  var BUILTIN = ["neko", "ginger"];
+  // Built-in skins: the public-domain classic sheet plus recoloured
+  // derivatives of it (identical frames, different fur), so a random pick
+  // reads as a mix of visibly different cats. Other archive skins are
+  // author-owned and are deliberately not bundled.
+  var BUILTIN = ["neko", "ginger", "smokey", "midnight", "biscuit"];
 
   // Classic sheets are 263px wide (8 columns of 32px plus a 1px separator),
   // so their width is not a multiple of the 32px cell. oneko sheets are a

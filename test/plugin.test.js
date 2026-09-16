@@ -65,15 +65,17 @@ describe("manifest", () => {
 });
 
 describe("bundled assets", () => {
-  it("ships two visually distinct skins at the expected size", () => {
-    // neko is the public-domain classic sheet; ginger is a recolour of it.
-    const expected = { neko: 197, ginger: 197 };
-    for (const [skin, height] of Object.entries(expected)) {
+  it("ships the bundled skins at the expected size", () => {
+    // All bundled skins are the public-domain classic sheet or recolours of it,
+    // so every one is the 263x197 (6-row) sheet.
+    const skins = ["neko", "ginger", "smokey", "midnight", "biscuit"];
+    expect(skins.length).toBeGreaterThan(1);
+    for (const skin of skins) {
       const path = join(pkg, "assets", skin + ".png");
       expect(existsSync(path), skin + " present").toBe(true);
       const size = pngSize(readFileSync(path));
       expect(size.width, skin).toBe(263);
-      expect(size.height, skin).toBe(height);
+      expect(size.height, skin).toBe(197);
     }
   });
 });

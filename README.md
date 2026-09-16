@@ -39,11 +39,10 @@ any note.
 
 ## Skins
 
-Two skins ship with the plugin: `neko` (the public-domain classic white cat)
-and `ginger` (a recoloured derivative of the same public-domain sheet, ginger
-fur), so a random pick reads as two visibly different cats. By default each
-resident cat picks a random bundled skin, so a page shows a mix. Set `skin` to
-pin one skin for every cat.
+Five skins ship with the plugin, all derived from the public-domain classic
+Neko sheet: `neko` (white), `ginger` (orange), `smokey` (grey), `midnight`
+(slate) and `biscuit` (cream). By default each resident cat picks a random
+bundled skin, so a page shows a mix. Set `skin` to pin one skin for every cat.
 
 To pin a specific set of distinct cats, give `skin` a JSON array of skin ids —
 one resident cat per id, cycling if there are more cats than ids:
@@ -123,9 +122,9 @@ npm test
 ## Credits
 
 Bundled sprites are the classic Neko sprites, considered public domain (see the
-Neko Archive linked above). The `ginger` skin is a recolour of that same
-public-domain sheet. Other skins in the archive are owned by their respective
-authors and are deliberately not bundled — add them yourself with the `skins`
-setting if you have the right to. The wandering and click-to-direct behavior
-follows oneko.js by adryd (MIT), the reference web implementation of the
-original Neko program.
+Neko Archive linked above). The `ginger`, `smokey`, `midnight` and `biscuit`
+skins are recolours of that same public-domain sheet. Other skins in the
+archive are owned by their respective authors and are deliberately not bundled
+— add them yourself with the `skins` setting if you have the right to. The
+wandering and click-to-direct behavior follows oneko.js by adryd (MIT), the
+reference web implementation of the original Neko program.

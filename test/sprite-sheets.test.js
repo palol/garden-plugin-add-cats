@@ -44,9 +44,9 @@ function separatorInk(png, col) {
 }
 
 describe("bundled sprite sheets decode and match the map", () => {
-  // Each bundled skin is a distinct colour; neko is the public-domain classic
-  // sheet and ginger is a recolour of it, so both are the 6-row (197) variant.
-  const BUNDLED = { neko: { h: 197 }, ginger: { h: 197 } };
+  // Every bundled skin is the public-domain classic sheet or a recolour of it,
+  // so all are the 6-row (197) variant.
+  const BUNDLED = { neko: { h: 197 }, ginger: { h: 197 }, smokey: { h: 197 }, midnight: { h: 197 }, biscuit: { h: 197 } };
   for (const [skin, dim] of Object.entries(BUNDLED)) {
     it(`${skin}: every mapped cat cell contains a drawn sprite`, () => {
       const png = decode(skin);
@@ -60,6 +60,33 @@ describe("bundled sprite sheets decode and match the map", () => {
       }
     });
   }
+
+  it("bundled skins are visually distinct from one another", () => {
+    // Regression guard: the two original bundled sheets were the same white cat
+    // (~97% identical), so a random pick always looked like two white cats.
+    const skins = Object.keys(BUNDLED);
+    const pix = Object.fromEntries(skins.map((s) => [s, decode(s)]));
+    for (let i = 0; i < skins.length; i++) {
+      for (let j = i + 1; j < skins.length; j++) {
+        const a = pix[skins[i]];
+        const b = pix[skins[j]];
+        let diff = 0;
+        for (let p = 0; p < a.data.length; p += 4) {
+          if (
+            Math.abs(a.data[p] - b.data[p]) +
+              Math.abs(a.data[p + 1] - b.data[p + 1]) +
+              Math.abs(a.data[p + 2] - b.data[p + 2]) +
+              Math.abs(a.data[p + 3] - b.data[p + 3]) >
+            24
+          ) {
+            diff++;
+          }
+        }
+        const frac = diff / (a.width * a.height);
+        expect(frac, `${skins[i]} vs ${skins[j]} differ`).toBeGreaterThan(0.1);
+      }
+    }
+  });
 
   it("classic cells are separated by keyed-out 1px columns", () => {
     const png = decode("neko");
