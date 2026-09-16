@@ -65,13 +65,15 @@ describe("manifest", () => {
 });
 
 describe("bundled assets", () => {
-  it("ships the classic Neko skins at the expected size", () => {
-    for (const skin of ["neko", "tabby"]) {
+  it("ships two visually distinct skins at the expected size", () => {
+    // neko is the public-domain classic sheet; ginger is a recolour of it.
+    const expected = { neko: 197, ginger: 197 };
+    for (const [skin, height] of Object.entries(expected)) {
       const path = join(pkg, "assets", skin + ".png");
       expect(existsSync(path), skin + " present").toBe(true);
       const size = pngSize(readFileSync(path));
       expect(size.width, skin).toBe(263);
-      expect(size.height, skin).toBe(197);
+      expect(size.height, skin).toBe(height);
     }
   });
 });
@@ -153,6 +155,14 @@ describe("client behavior (source contract)", () => {
     expect(clientSrc).toContain("makeCat(url, loadedMap, skinsToSpawn[index])");
     // The slot template passes the speeds map through to the client.
     expect(template).toContain("data-speeds");
+  });
+
+  it("scales the sheet from the loaded image, not a fixed map constant", () => {
+    // Classic heights vary (6-row and 5-row sheets both exist in the wild), so
+    // background scaling must come from the decoded sheet or the shorter ones
+    // stretch. Bundled sheets are both 197, but BYO skins are not.
+    expect(clientSrc).toContain("width: img.naturalWidth, height: img.naturalHeight");
+    expect(clientSrc).toContain("el.style.backgroundSize = (map.width * k)");
   });
 
   it("fetches only the configured sheets and makes no other requests", () => {

@@ -44,11 +44,14 @@ function separatorInk(png, col) {
 }
 
 describe("bundled sprite sheets decode and match the map", () => {
-  for (const skin of ["neko", "tabby"]) {
+  // Each bundled skin is a distinct colour; neko is the public-domain classic
+  // sheet and ginger is a recolour of it, so both are the 6-row (197) variant.
+  const BUNDLED = { neko: { h: 197 }, ginger: { h: 197 } };
+  for (const [skin, dim] of Object.entries(BUNDLED)) {
     it(`${skin}: every mapped cat cell contains a drawn sprite`, () => {
       const png = decode(skin);
       expect(png.width).toBe(263);
-      expect(png.height).toBe(197);
+      expect(png.height).toBe(dim.h);
       for (const [anim, frames] of Object.entries(CLASSIC.frames)) {
         for (const [c, r] of frames) {
           const ink = inkAt(png, c, r);

@@ -121,8 +121,10 @@
     }
   };
 
-  // Built-in public-domain skins ship with the plugin as pre-keyed PNGs.
-  var BUILTIN = ["neko", "tabby"];
+  // Built-in skins: the public-domain classic sheet plus a recoloured
+  // derivative of it (same frames, ginger fur), so a random pick reads as two
+  // visibly different cats. Other archive skins are author-owned, not bundled.
+  var BUILTIN = ["neko", "ginger"];
 
   // Classic sheets are 263px wide (8 columns of 32px plus a 1px separator),
   // so their width is not a multiple of the 32px cell. oneko sheets are a
@@ -155,7 +157,15 @@
       img.crossOrigin = "anonymous";
     }
     img.onload = function () {
-      var map = mapFor(img.naturalWidth, img.naturalHeight);
+      // Layout is chosen by width, but the sheet's own pixel size drives the
+      // background scaling: classic heights vary (6-row and 5-row sheets both
+      // ship), so a map constant would stretch the shorter sheets.
+      var base = mapFor(img.naturalWidth, img.naturalHeight);
+      var map = {
+        cell: base.cell, stride: base.stride,
+        width: img.naturalWidth, height: img.naturalHeight,
+        frames: base.frames
+      };
       if (cfg.chromaKey) {
         try {
           var canvas = document.createElement("canvas");
